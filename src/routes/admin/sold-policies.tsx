@@ -4,8 +4,10 @@ import { AdminHeader } from "@/components/admin/AdminHeader";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminRecentSalesTable } from "@/components/admin/AdminRecentSalesTable";
 import { useState } from "react";
+import { requireAdminSession } from "@/lib/admin-route-guard";
 
 export const Route = createFileRoute("/admin/sold-policies")({
+  beforeLoad: requireAdminSession,
   head: () => ({
     meta: [{ title: "Sold Policies Audit — InsureX Prime" }],
   }),

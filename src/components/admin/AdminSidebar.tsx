@@ -1,4 +1,6 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
 import {
   BarChart3,
   FileCheck2,
@@ -15,6 +17,8 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import { endAdminSession } from "@/lib/admin-auth";
+import { signOutFromGoogle } from "@/lib/firebase-client";
 
 export interface AdminSidebarProps {
   currentPath?: string;
@@ -29,6 +33,22 @@ export function AdminSidebar({
   onClose,
   onOpenExport,
 }: AdminSidebarProps) {
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await endAdminSession();
+      await signOutFromGoogle().catch(() => undefined);
+      await navigate({ to: "/login" });
+    } catch {
+      toast.error("Unable to end your session. Please try again.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const navItems = [
     { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
     { label: "Agents", href: "/admin/agents", icon: UsersRound },
@@ -142,13 +162,15 @@ export function AdminSidebar({
           <span className="size-2 rounded-full bg-signal shrink-0" title="Online" />
         </div>
 
-        <Link
-          to="/login"
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 disabled:opacity-60"
         >
           <LogOut className="size-3.5" />
-          <span>Logout</span>
-        </Link>
+          <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+        </button>
       </div>
     </div>
   );
