@@ -94,10 +94,10 @@ function Index() {
             ))}
           </div>
           <div className="hidden items-center gap-2 lg:flex">
-            <Button asChild variant="outline" className="h-10 rounded-full border-border bg-background px-5 shadow-none">
-              <Link to="/login">Admin / Agent Login</Link>
-            </Button>
-            <Button asChild className="h-10 rounded-full px-5 shadow-none"><a href="#insurance">Get Started</a></Button>
+            <Link to="/login" className="inline-flex h-10 items-center justify-center rounded-full border border-border bg-background px-5 text-sm font-medium transition-colors hover:bg-accent">
+              Admin / Agent Login
+            </Link>
+            <a href="#insurance" className="inline-flex h-10 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">Get Started</a>
           </div>
           <Button aria-label={menuOpen ? "Close menu" : "Open menu"} variant="ghost" size="icon" className="rounded-full lg:hidden" onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X /> : <Menu />}
@@ -109,7 +109,7 @@ function Index() {
               {[['Home', 'top'], ['Insurance', 'insurance'], ['About', 'about'], ['Contact', 'contact']].map(([label, id]) => (
                 <a key={id} className="rounded-xl px-4 py-3 font-medium hover:bg-muted" href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>
               ))}
-              <Button asChild className="mt-3 h-12 rounded-full"><Link to="/login">Admin / Agent Login</Link></Button>
+              <Link to="/login" className="mt-3 inline-flex h-12 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">Admin / Agent Login</Link>
             </div>
           </div>
         )}
