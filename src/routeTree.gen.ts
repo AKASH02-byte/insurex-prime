@@ -11,6 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AdminAgentsRouteImport } from './routes/admin/agents'
+import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
+import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
+import { Route as AdminPoliciesRouteImport } from './routes/admin/policies'
+import { Route as AdminReceiptsRouteImport } from './routes/admin/receipts'
+import { Route as AdminReportsRouteImport } from './routes/admin/reports'
+import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
+import { Route as AdminSoldPoliciesRouteImport } from './routes/admin/sold-policies'
+import { Route as AgentDashboardRouteImport } from './routes/agent/dashboard'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +31,146 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminAgentsRoute = AdminAgentsRouteImport.update({
+  id: '/admin/agents',
+  path: '/admin/agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminCustomersRoute = AdminCustomersRouteImport.update({
+  id: '/admin/customers',
+  path: '/admin/customers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/admin/dashboard',
+  path: '/admin/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminPoliciesRoute = AdminPoliciesRouteImport.update({
+  id: '/admin/policies',
+  path: '/admin/policies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminReceiptsRoute = AdminReceiptsRouteImport.update({
+  id: '/admin/receipts',
+  path: '/admin/receipts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminReportsRoute = AdminReportsRouteImport.update({
+  id: '/admin/reports',
+  path: '/admin/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/admin/settings',
+  path: '/admin/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSoldPoliciesRoute = AdminSoldPoliciesRouteImport.update({
+  id: '/admin/sold-policies',
+  path: '/admin/sold-policies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentDashboardRoute = AgentDashboardRouteImport.update({
+  id: '/agent/dashboard',
+  path: '/agent/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/customers': typeof AdminCustomersRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/policies': typeof AdminPoliciesRoute
+  '/admin/receipts': typeof AdminReceiptsRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/sold-policies': typeof AdminSoldPoliciesRoute
+  '/agent/dashboard': typeof AgentDashboardRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/customers': typeof AdminCustomersRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/policies': typeof AdminPoliciesRoute
+  '/admin/receipts': typeof AdminReceiptsRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/sold-policies': typeof AdminSoldPoliciesRoute
+  '/agent/dashboard': typeof AgentDashboardRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/customers': typeof AdminCustomersRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/policies': typeof AdminPoliciesRoute
+  '/admin/receipts': typeof AdminReceiptsRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/sold-policies': typeof AdminSoldPoliciesRoute
+  '/agent/dashboard': typeof AgentDashboardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/admin/agents'
+    | '/admin/customers'
+    | '/admin/dashboard'
+    | '/admin/policies'
+    | '/admin/receipts'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/sold-policies'
+    | '/agent/dashboard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login'
-  id: '__root__' | '/' | '/login'
+  to:
+    | '/'
+    | '/login'
+    | '/admin/agents'
+    | '/admin/customers'
+    | '/admin/dashboard'
+    | '/admin/policies'
+    | '/admin/receipts'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/sold-policies'
+    | '/agent/dashboard'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/admin/agents'
+    | '/admin/customers'
+    | '/admin/dashboard'
+    | '/admin/policies'
+    | '/admin/receipts'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/sold-policies'
+    | '/agent/dashboard'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  AdminAgentsRoute: typeof AdminAgentsRoute
+  AdminCustomersRoute: typeof AdminCustomersRoute
+  AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminPoliciesRoute: typeof AdminPoliciesRoute
+  AdminReceiptsRoute: typeof AdminReceiptsRoute
+  AdminReportsRoute: typeof AdminReportsRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminSoldPoliciesRoute: typeof AdminSoldPoliciesRoute
+  AgentDashboardRoute: typeof AgentDashboardRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +189,84 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/agents': {
+      id: '/admin/agents'
+      path: '/admin/agents'
+      fullPath: '/admin/agents'
+      preLoaderRoute: typeof AdminAgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/customers': {
+      id: '/admin/customers'
+      path: '/admin/customers'
+      fullPath: '/admin/customers'
+      preLoaderRoute: typeof AdminCustomersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/dashboard': {
+      id: '/admin/dashboard'
+      path: '/admin/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/policies': {
+      id: '/admin/policies'
+      path: '/admin/policies'
+      fullPath: '/admin/policies'
+      preLoaderRoute: typeof AdminPoliciesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/receipts': {
+      id: '/admin/receipts'
+      path: '/admin/receipts'
+      fullPath: '/admin/receipts'
+      preLoaderRoute: typeof AdminReceiptsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/reports': {
+      id: '/admin/reports'
+      path: '/admin/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof AdminReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/sold-policies': {
+      id: '/admin/sold-policies'
+      path: '/admin/sold-policies'
+      fullPath: '/admin/sold-policies'
+      preLoaderRoute: typeof AdminSoldPoliciesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agent/dashboard': {
+      id: '/agent/dashboard'
+      path: '/agent/dashboard'
+      fullPath: '/agent/dashboard'
+      preLoaderRoute: typeof AgentDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  AdminAgentsRoute: AdminAgentsRoute,
+  AdminCustomersRoute: AdminCustomersRoute,
+  AdminDashboardRoute: AdminDashboardRoute,
+  AdminPoliciesRoute: AdminPoliciesRoute,
+  AdminReceiptsRoute: AdminReceiptsRoute,
+  AdminReportsRoute: AdminReportsRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminSoldPoliciesRoute: AdminSoldPoliciesRoute,
+  AgentDashboardRoute: AgentDashboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

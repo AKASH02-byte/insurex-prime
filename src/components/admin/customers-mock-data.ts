@@ -1,0 +1,373 @@
+import { formatINR } from "./admin-mock-data";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+export type PolicyStatus = "Active" | "Pending" | "Expired";
+export type InsuranceType = "Health" | "Motor" | "Other";
+export type CustomerStatus = "Active" | "Pending" | "Expired";
+
+export interface CustomerPolicy {
+  policyNumber: string;
+  type: InsuranceType;
+  policyName: string;
+  premium: number;
+  issueDate: string;   // "DD MMM YYYY"
+  expiryDate: string;  // "DD MMM YYYY"
+  agentName: string;
+  agentCode: string;
+  status: PolicyStatus;
+}
+
+export interface Customer {
+  id: string;          // "CUS-1001"
+  name: string;
+  avatar: string;      // 2-char initials
+  phone: string;
+  email: string;
+  dob: string;         // "DD MMM YYYY"
+  gender: "Male" | "Female" | "Other";
+  address: string;
+  city: string;
+  state: string;
+  nomineeName: string;
+  nomineeRelation: string;
+  insuranceTypes: InsuranceType[];
+  policies: CustomerPolicy[];
+  agentName: string;
+  agentCode: string;
+  status: CustomerStatus;
+  dateAdded: string;   // ISO "YYYY-MM-DD"
+  lastUpdated: string; // "DD MMM YYYY"
+}
+
+// ─── Demo Policies pool ───────────────────────────────────────────────────────
+const P = (
+  num: string,
+  type: InsuranceType,
+  name: string,
+  premium: number,
+  issue: string,
+  expiry: string,
+  agent: string,
+  code: string,
+  status: PolicyStatus,
+): CustomerPolicy => ({
+  policyNumber: num,
+  type,
+  policyName: name,
+  premium,
+  issueDate: issue,
+  expiryDate: expiry,
+  agentName: agent,
+  agentCode: code,
+  status,
+});
+
+// ─── 12 Demo Customers ────────────────────────────────────────────────────────
+export const customersFullList: Customer[] = [
+  {
+    id: "CUS-1001",
+    name: "Rahul Sharma",
+    avatar: "RS",
+    phone: "+91 98765 43210",
+    email: "rahul.sharma@example.com",
+    dob: "12 Mar 1985",
+    gender: "Male",
+    address: "42, MG Road, Andheri West, Mumbai, Maharashtra – 400058",
+    city: "Mumbai",
+    state: "Maharashtra",
+    nomineeName: "Anjali Sharma",
+    nomineeRelation: "Spouse",
+    insuranceTypes: ["Health"],
+    policies: [
+      P("POL-10021", "Health", "Health Gold", 15000, "26 Sep 2026", "25 Sep 2027", "Rajesh Verma", "AGT-01", "Active"),
+      P("POL-10005", "Health", "Critical Care 360", 12000, "10 Jan 2026", "09 Jan 2027", "Rajesh Verma", "AGT-01", "Active"),
+    ],
+    agentName: "Rajesh Verma",
+    agentCode: "AGT-01",
+    status: "Active",
+    dateAdded: "2026-01-10",
+    lastUpdated: "26 Sep 2026",
+  },
+  {
+    id: "CUS-1002",
+    name: "Arun Kumar",
+    avatar: "AK",
+    phone: "+91 98234 56780",
+    email: "arun.kumar@example.com",
+    dob: "04 Jul 1990",
+    gender: "Male",
+    address: "15, Sector 18, Noida, Uttar Pradesh – 201301",
+    city: "Noida",
+    state: "Uttar Pradesh",
+    nomineeName: "Sunita Kumar",
+    nomineeRelation: "Spouse",
+    insuranceTypes: ["Motor"],
+    policies: [
+      P("POL-10020", "Motor", "Car Comprehensive", 9500, "26 Sep 2026", "25 Sep 2027", "Priya Sharma", "AGT-02", "Active"),
+    ],
+    agentName: "Priya Sharma",
+    agentCode: "AGT-02",
+    status: "Active",
+    dateAdded: "2026-03-22",
+    lastUpdated: "26 Sep 2026",
+  },
+  {
+    id: "CUS-1003",
+    name: "Meera Nair",
+    avatar: "MN",
+    phone: "+91 90876 54321",
+    email: "meera.nair@example.com",
+    dob: "19 Nov 1978",
+    gender: "Female",
+    address: "88, Koramangala 5th Block, Bengaluru, Karnataka – 560095",
+    city: "Bengaluru",
+    state: "Karnataka",
+    nomineeName: "Anil Nair",
+    nomineeRelation: "Spouse",
+    insuranceTypes: ["Health"],
+    policies: [
+      P("POL-10019", "Health", "Family Floater Plus", 22500, "25 Sep 2026", "24 Sep 2027", "Amit Kumar", "AGT-03", "Active"),
+    ],
+    agentName: "Amit Kumar",
+    agentCode: "AGT-03",
+    status: "Active",
+    dateAdded: "2026-04-15",
+    lastUpdated: "25 Sep 2026",
+  },
+  {
+    id: "CUS-1004",
+    name: "Sandeep Roy",
+    avatar: "SR",
+    phone: "+91 99001 23456",
+    email: "sandeep.roy@example.com",
+    dob: "08 Feb 1993",
+    gender: "Male",
+    address: "23, CG Road, Navrangpura, Ahmedabad, Gujarat – 380009",
+    city: "Ahmedabad",
+    state: "Gujarat",
+    nomineeName: "Rekha Roy",
+    nomineeRelation: "Mother",
+    insuranceTypes: ["Motor"],
+    policies: [
+      P("POL-10018", "Motor", "Two-Wheeler Protect", 4200, "25 Sep 2026", "24 Sep 2027", "Rajesh Verma", "AGT-01", "Active"),
+    ],
+    agentName: "Rajesh Verma",
+    agentCode: "AGT-01",
+    status: "Active",
+    dateAdded: "2026-05-01",
+    lastUpdated: "25 Sep 2026",
+  },
+  {
+    id: "CUS-1005",
+    name: "Ananya Sen",
+    avatar: "AS",
+    phone: "+91 91234 56789",
+    email: "ananya.sen@example.com",
+    dob: "25 Jun 1996",
+    gender: "Female",
+    address: "7, Park Street, Kolkata, West Bengal – 700016",
+    city: "Kolkata",
+    state: "West Bengal",
+    nomineeName: "Tapan Sen",
+    nomineeRelation: "Father",
+    insuranceTypes: ["Health"],
+    policies: [
+      P("POL-10017", "Health", "Critical Care 360", 18000, "24 Sep 2026", "23 Sep 2027", "Sneha Patel", "AGT-04", "Pending"),
+    ],
+    agentName: "Sneha Patel",
+    agentCode: "AGT-04",
+    status: "Pending",
+    dateAdded: "2026-06-10",
+    lastUpdated: "24 Sep 2026",
+  },
+  {
+    id: "CUS-1006",
+    name: "Devendra Singh",
+    avatar: "DS",
+    phone: "+91 87654 32100",
+    email: "devendra.singh@example.com",
+    dob: "15 Dec 1975",
+    gender: "Male",
+    address: "56, Hazratganj, Lucknow, Uttar Pradesh – 226001",
+    city: "Lucknow",
+    state: "Uttar Pradesh",
+    nomineeName: "Usha Singh",
+    nomineeRelation: "Spouse",
+    insuranceTypes: ["Motor"],
+    policies: [
+      P("POL-10016", "Motor", "Commercial Fleet Shield", 45000, "24 Sep 2026", "23 Sep 2027", "Priya Sharma", "AGT-02", "Active"),
+    ],
+    agentName: "Priya Sharma",
+    agentCode: "AGT-02",
+    status: "Active",
+    dateAdded: "2026-02-18",
+    lastUpdated: "24 Sep 2026",
+  },
+  {
+    id: "CUS-1007",
+    name: "Kavita Reddy",
+    avatar: "KR",
+    phone: "+91 95432 10987",
+    email: "kavita.reddy@example.com",
+    dob: "30 Aug 1955",
+    gender: "Female",
+    address: "3, Anna Salai, Triplicane, Chennai, Tamil Nadu – 600005",
+    city: "Chennai",
+    state: "Tamil Nadu",
+    nomineeName: "Suresh Reddy",
+    nomineeRelation: "Son",
+    insuranceTypes: ["Health"],
+    policies: [
+      P("POL-10015", "Health", "Senior Citizen Care", 28000, "23 Sep 2026", "22 Sep 2027", "Amit Kumar", "AGT-03", "Pending"),
+    ],
+    agentName: "Amit Kumar",
+    agentCode: "AGT-03",
+    status: "Pending",
+    dateAdded: "2026-07-05",
+    lastUpdated: "23 Sep 2026",
+  },
+  {
+    id: "CUS-1008",
+    name: "Pradeep Joshi",
+    avatar: "PJ",
+    phone: "+91 92345 67891",
+    email: "pradeep.joshi@example.com",
+    dob: "11 Apr 1988",
+    gender: "Male",
+    address: "22, Link Road, Baner, Pune, Maharashtra – 411045",
+    city: "Pune",
+    state: "Maharashtra",
+    nomineeName: "Leela Joshi",
+    nomineeRelation: "Spouse",
+    insuranceTypes: ["Health", "Motor"],
+    policies: [
+      P("POL-10014", "Health", "Health Gold Plus", 20000, "20 Sep 2026", "19 Sep 2027", "Sunita Reddy", "AGT-10", "Active"),
+      P("POL-10013", "Motor", "Car Comprehensive", 9800, "18 Sep 2026", "17 Sep 2027", "Sunita Reddy", "AGT-10", "Active"),
+    ],
+    agentName: "Sunita Reddy",
+    agentCode: "AGT-10",
+    status: "Active",
+    dateAdded: "2026-08-14",
+    lastUpdated: "20 Sep 2026",
+  },
+  {
+    id: "CUS-1009",
+    name: "Lakshmi Iyer",
+    avatar: "LI",
+    phone: "+91 93456 78912",
+    email: "lakshmi.iyer@example.com",
+    dob: "22 Jan 1970",
+    gender: "Female",
+    address: "45, Jubilee Hills, Hyderabad, Telangana – 500033",
+    city: "Hyderabad",
+    state: "Telangana",
+    nomineeName: "Venkat Iyer",
+    nomineeRelation: "Spouse",
+    insuranceTypes: ["Health"],
+    policies: [
+      P("POL-10012", "Health", "Family Floater Plus", 25000, "15 Sep 2026", "14 Sep 2027", "Meenakshi Pillai", "AGT-08", "Active"),
+      P("POL-10003", "Health", "Critical Care 360", 14000, "01 Mar 2025", "28 Feb 2026", "Meenakshi Pillai", "AGT-08", "Expired"),
+    ],
+    agentName: "Meenakshi Pillai",
+    agentCode: "AGT-08",
+    status: "Active",
+    dateAdded: "2025-03-01",
+    lastUpdated: "15 Sep 2026",
+  },
+  {
+    id: "CUS-1010",
+    name: "Rohit Das",
+    avatar: "RD",
+    phone: "+91 94567 89012",
+    email: "rohit.das@example.com",
+    dob: "07 Sep 1998",
+    gender: "Male",
+    address: "12, Marine Drive, Fort, Kochi, Kerala – 682001",
+    city: "Kochi",
+    state: "Kerala",
+    nomineeName: "Sushma Das",
+    nomineeRelation: "Mother",
+    insuranceTypes: ["Motor"],
+    policies: [
+      P("POL-10011", "Motor", "Two-Wheeler Protect", 3800, "10 Sep 2026", "09 Sep 2027", "Vikram Malhotra", "AGT-05", "Active"),
+    ],
+    agentName: "Vikram Malhotra",
+    agentCode: "AGT-05",
+    status: "Active",
+    dateAdded: "2026-09-10",
+    lastUpdated: "10 Sep 2026",
+  },
+  {
+    id: "CUS-1011",
+    name: "Neha Gupta",
+    avatar: "NG",
+    phone: "+91 96789 01234",
+    email: "neha.gupta@example.com",
+    dob: "14 May 1992",
+    gender: "Female",
+    address: "88, Rajouri Garden, New Delhi – 110027",
+    city: "New Delhi",
+    state: "Delhi",
+    nomineeName: "Ravi Gupta",
+    nomineeRelation: "Spouse",
+    insuranceTypes: ["Health", "Other"],
+    policies: [
+      P("POL-10010", "Health", "Health Silver", 10500, "05 Sep 2026", "04 Sep 2027", "Divya Nair", "AGT-06", "Active"),
+      P("POL-10009", "Other", "Term Life Basic", 8200, "01 Feb 2025", "31 Jan 2026", "Divya Nair", "AGT-06", "Expired"),
+    ],
+    agentName: "Divya Nair",
+    agentCode: "AGT-06",
+    status: "Active",
+    dateAdded: "2025-02-01",
+    lastUpdated: "05 Sep 2026",
+  },
+  {
+    id: "CUS-1012",
+    name: "Suresh Menon",
+    avatar: "SM",
+    phone: "+91 97890 12345",
+    email: "suresh.menon@example.com",
+    dob: "29 Oct 1965",
+    gender: "Male",
+    address: "101, Viman Nagar, Pune, Maharashtra – 411014",
+    city: "Pune",
+    state: "Maharashtra",
+    nomineeName: "Radha Menon",
+    nomineeRelation: "Spouse",
+    insuranceTypes: ["Health"],
+    policies: [
+      P("POL-10028", "Health", "Health Gold Plus", 32000, "01 Sep 2026", "31 Aug 2027", "Meenakshi Pillai", "AGT-08", "Active"),
+    ],
+    agentName: "Meenakshi Pillai",
+    agentCode: "AGT-08",
+    status: "Active",
+    dateAdded: "2026-09-01",
+    lastUpdated: "01 Sep 2026",
+  },
+];
+
+// ─── Customer KPI stats ────────────────────────────────────────────────────────
+export const customerKpiData = {
+  totalCustomers: 124, // demo total (includes customers not in this page)
+  activeCustomers: customersFullList.filter((c) => c.status === "Active").length,
+  healthCustomers: customersFullList.filter((c) => c.insuranceTypes.includes("Health")).length,
+  motorCustomers: customersFullList.filter((c) => c.insuranceTypes.includes("Motor")).length,
+  customersGrowth: "+18 this month",
+  activeGrowth: "+9.6%",
+  healthGrowth: "+7.2%",
+  motorGrowth: "+11.4%",
+};
+
+// ─── Unique agent list for filter dropdown ────────────────────────────────────
+export const agentFilterOptions = Array.from(
+  new Map(
+    customersFullList.map((c) => [c.agentCode, { code: c.agentCode, name: c.agentName }]),
+  ).values(),
+).sort((a, b) => a.name.localeCompare(b.name));
+
+// ─── Find customer by id ──────────────────────────────────────────────────────
+export const findCustomerById = (id: string): Customer | undefined =>
+  customersFullList.find((c) => c.id === id);
+
+// ─── Re-export formatINR ──────────────────────────────────────────────────────
+export { formatINR };
