@@ -14,7 +14,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
@@ -57,7 +57,7 @@ const features = [
   { title: "Centralized Records", text: "One organized view across your insurance journey.", icon: BadgeCheck, className: "md:col-span-2" },
 ];
 
-function MagneticLink({ children, className, to = "/login" }: { children: React.ReactNode; className: string; to?: "/login" }) {
+function MagneticLink({ children, className, to = "/login" }: { children: ReactNode; className: string; to?: "/login" }) {
   const ref = useRef<HTMLAnchorElement>(null);
   const move = (event: ReactMouseEvent<HTMLAnchorElement>) => {
     const element = ref.current;
