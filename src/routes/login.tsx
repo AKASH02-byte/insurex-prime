@@ -1,8 +1,9 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  Chrome,
   Eye,
   EyeOff,
   KeyRound,
@@ -19,7 +20,6 @@ import {
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -32,8 +32,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
+import { signInWithPopup } from "firebase/auth";
+import { exchangeFirebaseIdentity, getAdminSession } from "@/lib/admin-auth";
+import { signOutFromGoogle } from "@/lib/firebase-client";
+import { auth, googleProvider } from "@/lib/firebase";
 
 export const Route = createFileRoute("/login")({
+  beforeLoad: async () => {
+    if (await getAdminSession()) throw redirect({ to: "/admin/dashboard" });
+  },
   head: () => ({
     meta: [
       { title: "Sign In — InsureX Prime Portal" },
@@ -63,8 +70,8 @@ function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState("");
 
   // Form errors
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
@@ -124,57 +131,39 @@ function LoginPage() {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setTouched({ identifier: true, password: true });
+    toast.error("Password sign-in is not connected. Use your authorized Google account.");
+  };
 
-    const isValid = validate();
-    if (!isValid) {
-      toast.error("Please correct the form errors before continuing.");
+  const handleGoogleSignIn = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Google sign-in is currently available for Super Admin accounts only.");
       return;
     }
 
-    setIsLoading(true);
-
-    // Simulate backend verification
-    setTimeout(() => {
-      setIsLoading(false);
-      const roleLabel = isSuperAdmin ? "Super Admin" : "Agent";
-      toast.success(`Authenticated successfully as ${roleLabel}! Redirecting...`);
-
-      if (isSuperAdmin) {
-        navigate({ to: "/admin/dashboard" });
-      } else {
-        navigate({ to: "/agent/dashboard" });
-      }
-    }, 900);
-  };
-
-  const handleQuickFill = (targetRole: Role) => {
-    setRole(targetRole);
-    if (targetRole === "super_admin") {
-      setIdentifier("admin@insurex.com");
-      setPassword("PrimeAdmin#2026");
-    } else {
-      setIdentifier("agent.carter@insurex.com");
-      setPassword("AgentPro#2026");
+    setGoogleError("");
+    setIsGoogleLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const email = result.user.email;
+      console.log(email);
+      const idToken = await result.user.getIdToken();
+      await exchangeFirebaseIdentity({ data: { idToken } });
+      toast.success(`Signed in as ${email}.`);
+      await navigate({ to: "/admin/dashboard" });
+    } catch (error) {
+      await signOutFromGoogle().catch(() => undefined);
+      const message = error instanceof Error ? error.message : "Google sign-in failed.";
+      setGoogleError(message);
+      toast.error(message);
+    } finally {
+      setIsGoogleLoading(false);
     }
-    setErrors({});
-    setTouched({ identifier: false, password: false });
-    toast.info(
-      `Filled demo credentials for ${targetRole === "super_admin" ? "Super Admin" : "Agent"}`,
-    );
   };
 
   const handleForgotPasswordSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail.trim() || !forgotEmail.includes("@")) {
-      setForgotError("Please enter a valid registered email address.");
-      return;
-    }
-    setForgotError("");
-    setForgotSent(true);
-    setTimeout(() => {
-      toast.success("Password reset instructions sent to your email!");
-    }, 400);
+    setForgotSent(false);
+    setForgotError("Password recovery is unavailable because password sign-in is not configured.");
   };
 
   return (
@@ -291,6 +280,41 @@ function LoginPage() {
                       <span className="size-1.5 rounded-full bg-signal absolute right-3 top-3" />
                     )}
                   </button>
+                </div>
+              </div>
+
+              <div className="mb-6 space-y-3">
+                <Button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={!isSuperAdmin || isGoogleLoading}
+                  className="h-12 w-full rounded-xl font-semibold"
+                >
+                  {isGoogleLoading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Chrome className="size-4" />
+                  )}
+                  <span>
+                    {isGoogleLoading
+                      ? "Verifying Google account..."
+                      : isSuperAdmin
+                        ? "Continue with Google"
+                        : "Google sign-in is for Super Admins"}
+                  </span>
+                </Button>
+                {googleError && (
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+                    <ShieldAlert className="size-3.5 shrink-0" />
+                    <span>{googleError}</span>
+                  </p>
+                )}
+                <div className="flex items-center gap-3" aria-hidden="true">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+                    Password access unavailable
+                  </span>
+                  <span className="h-px flex-1 bg-border" />
                 </div>
               </div>
 
@@ -429,72 +453,13 @@ function LoginPage() {
                   )}
                 </div>
 
-                {/* Remember Me Option */}
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center space-x-2.5">
-                    <Checkbox
-                      id="remember-me"
-                      checked={rememberMe}
-                      onCheckedChange={(checked) => setRememberMe(checked === true)}
-                    />
-                    <label
-                      htmlFor="remember-me"
-                      className="text-xs font-medium text-muted-foreground leading-none cursor-pointer select-none"
-                    >
-                      Remember this workstation for 30 days
-                    </label>
-                  </div>
-                </div>
-
                 {/* Submit Login Button */}
                 <div className="pt-2">
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="magnetic-button w-full h-12 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-md transition-all hover:bg-primary/95 hover:shadow-lg disabled:opacity-75 cursor-pointer"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        <span>Verifying credentials...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Sign In as {isSuperAdmin ? "Super Admin" : "Agent"}</span>
-                        <ArrowRight className="size-4" />
-                      </>
-                    )}
+                  <Button type="submit" variant="outline" className="w-full rounded-xl text-xs">
+                    Password sign-in is not connected
                   </Button>
                 </div>
               </form>
-
-              {/* Quick Demo Fillers for Instant Evaluation */}
-              <div className="mt-8 border-t border-border/80 pt-6">
-                <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                  <span className="font-semibold uppercase tracking-wider text-[11px]">
-                    One-Click Demo Fill
-                  </span>
-                  <span className="text-[11px]">Frontend Mocking Active</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickFill("super_admin")}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 py-2.5 px-3 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
-                  >
-                    <Shield className="size-3.5 text-primary" />
-                    <span>Demo Super Admin</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickFill("agent")}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 py-2.5 px-3 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
-                  >
-                    <Users className="size-3.5 text-primary" />
-                    <span>Demo Agent</span>
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
 

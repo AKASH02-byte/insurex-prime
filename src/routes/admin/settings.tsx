@@ -3,8 +3,10 @@ import { ArrowLeft, CheckCircle2, Settings, Shield } from "lucide-react";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { useState } from "react";
+import { requireAdminSession } from "@/lib/admin-route-guard";
 
 export const Route = createFileRoute("/admin/settings")({
+  beforeLoad: requireAdminSession,
   head: () => ({
     meta: [{ title: "System Settings — InsureX Prime" }],
   }),

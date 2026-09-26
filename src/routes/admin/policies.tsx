@@ -5,8 +5,10 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminRecentSalesTable } from "@/components/admin/AdminRecentSalesTable";
 import { AdminPolicySummary } from "@/components/admin/AdminPolicySummary";
 import { useState } from "react";
+import { requireAdminSession } from "@/lib/admin-route-guard";
 
 export const Route = createFileRoute("/admin/policies")({
+  beforeLoad: requireAdminSession,
   head: () => ({
     meta: [{ title: "Insurance Policies Catalog — InsureX Prime" }],
   }),

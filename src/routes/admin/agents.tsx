@@ -56,6 +56,7 @@ import { Badge } from "@/components/ui/badge";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { AdminExportModal } from "@/components/admin/AdminExportModal";
+import { requireAdminSession } from "@/lib/admin-route-guard";
 import { formatINR } from "@/components/admin/admin-mock-data";
 import {
   agentKpiData,
@@ -65,6 +66,7 @@ import {
 } from "@/components/admin/agents-mock-data";
 
 export const Route = createFileRoute("/admin/agents")({
+  beforeLoad: requireAdminSession,
   head: () => ({
     meta: [
       { title: "Agents Directory — InsureX Prime" },

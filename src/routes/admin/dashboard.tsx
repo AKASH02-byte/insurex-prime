@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { requireAdminSession } from "@/lib/admin-route-guard";
 import { useMemo, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AdminHeader } from "@/components/admin/AdminHeader";
@@ -22,6 +23,7 @@ import {
 } from "@/components/admin/admin-mock-data";
 
 export const Route = createFileRoute("/admin/dashboard")({
+  beforeLoad: requireAdminSession,
   head: () => ({
     meta: [
       { title: "Super Admin Dashboard — InsureX Prime" },
