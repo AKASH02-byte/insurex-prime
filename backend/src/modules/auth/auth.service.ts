@@ -1,7 +1,7 @@
 import type { Database } from "../../config/database.js";
 import { AppError } from "../../utils/errors.js";
 
-const userInclude = { agent: { include: { user: { select: { email: true } } } } } as const;
+export const userInclude = { agent: { include: { user: { select: { email: true } } } } } as const;
 
 function isUniqueViolation(error: unknown) {
   return (error as { code?: unknown }).code === "P2002";
@@ -69,6 +69,14 @@ export async function resolveUserForIdentity(
       "This account has not been set up for InsureX. Contact your administrator.",
     );
   }
+  assertCanSignIn(user);
+  return user;
+}
+
+type UserWithAgent = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
+
+/** Rejects disabled users and agents without an ACTIVE agent profile. */
+export function assertCanSignIn(user: UserWithAgent) {
   if (user.status !== "ACTIVE") {
     throw new AppError(403, "ACCOUNT_DISABLED", "This account has been disabled.");
   }
@@ -84,7 +92,6 @@ export async function resolveUserForIdentity(
       throw new AppError(403, "ACCOUNT_DISABLED", "This agent account is not active.");
     }
   }
-  return user;
 }
 
 export async function getCurrentUser(db: Database, userId: string) {

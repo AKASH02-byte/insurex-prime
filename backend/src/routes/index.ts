@@ -1,6 +1,8 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { agentPortalRoutes } from "../modules/agent-portal/agent-portal.routes.js";
 import { agentRoutes } from "../modules/agents/agents.routes.js";
 import { auditLogRoutes } from "../modules/audit-logs/audit-logs.routes.js";
+import { agentLoginRoutes } from "../modules/auth/agent-login.routes.js";
 import { authRoutes } from "../modules/auth/auth.routes.js";
 import { customerRoutes } from "../modules/customers/customers.routes.js";
 import { policyRoutes } from "../modules/policies/policies.routes.js";
@@ -10,11 +12,16 @@ import { reportRoutes } from "../modules/reports/reports.routes.js";
 import { soldPolicyRoutes } from "../modules/sold-policies/sold-policies.routes.js";
 import { healthRoutes } from "./health.js";
 
-/** All /api/v1 routes. Every module except health requires a Firebase ID token. */
+/**
+ * All /api/v1 routes. Every module except health and agent sign-in/out requires either a
+ * Firebase ID token (`Authorization: Bearer`) or the agent session cookie.
+ */
 export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(healthRoutes);
   await app.register(authRoutes, { prefix: "/auth" });
+  await app.register(agentLoginRoutes, { prefix: "/auth/agent" });
   await app.register(agentRoutes, { prefix: "/agents" });
+  await app.register(agentPortalRoutes, { prefix: "/agent" });
   await app.register(customerRoutes, { prefix: "/customers" });
   await app.register(policyRoutes, { prefix: "/policies" });
   await app.register(soldPolicyRoutes, { prefix: "/sold-policies" });

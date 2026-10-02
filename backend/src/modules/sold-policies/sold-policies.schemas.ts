@@ -3,6 +3,7 @@ import {
   InsuranceType,
   PaymentMethod,
   PaymentStatus,
+  PremiumFrequency,
   SoldPolicyStatus,
 } from "../../generated/prisma/enums.js";
 import {
@@ -88,8 +89,41 @@ export const createSoldPolicyBodySchema = z.object({
     .positive()
     .max(1e10)
     .optional()
-    .describe("SUPER_ADMIN only override; defaults to the catalog premium. Ignored for agents."),
+    .describe("SUPER_ADMIN only override; defaults to the catalog premium. Agents get 403."),
+  paymentStatus: z
+    .enum(["PAID", "PENDING", "DUE"])
+    .optional()
+    .describe(
+      "Payment state of an offline sale being recorded. PAID starts the policy ACTIVE without creating a receipt. Ignored when paymentMethod is given (that always records a PAID receipt).",
+    ),
+  paymentMethod: z
+    .enum(PaymentMethod)
+    .optional()
+    .describe(
+      "Premium collected in full at the point of sale: a PAID receipt is created in the same transaction and the policy starts ACTIVE. Omit to record the sale as PENDING payment.",
+    ),
 });
+
+export const quoteSoldPolicyQuerySchema = z.object({
+  policyId: z.uuid(),
+  customerId: z.uuid(),
+  issueDate: z.iso.date().optional().describe("YYYY-MM-DD; defaults to today"),
+  agentId: z.uuid().optional().describe("SUPER_ADMIN only"),
+});
+
+export const soldPolicyQuoteSchema = z
+  .object({
+    policy: policyRefSchema.extend({
+      coverageAmount: z.number(),
+      premiumFrequency: z.enum(PremiumFrequency),
+      durationMonths: z.number().int(),
+    }),
+    customer: customerRefSchema,
+    premium: z.number(),
+    issueDate: z.string().describe("YYYY-MM-DD"),
+    expiryDate: z.string().describe("YYYY-MM-DD"),
+  })
+  .meta({ id: "SoldPolicyQuote" });
 
 export const updateSoldPolicyBodySchema = z
   .object({

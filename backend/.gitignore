@@ -12,3 +12,6 @@ src/generated
 # Firebase service-account files must never be committed
 *service-account*.json
 *firebase-adminsdk*.json
+
+# Local PGlite development database (see README)
+.pglite

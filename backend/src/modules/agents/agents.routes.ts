@@ -9,11 +9,13 @@ import {
   successSchema,
 } from "../../utils/response.js";
 import {
+  agentCreatedSchema,
   agentIdParamsSchema,
   agentStatusBodySchema,
   agentWithStatsSchema,
   createAgentBodySchema,
   listAgentsQuerySchema,
+  temporaryPasswordSchema,
   updateAgentBodySchema,
 } from "./agents.schemas.js";
 import {
@@ -21,6 +23,7 @@ import {
   deleteAgent,
   getAgent,
   listAgents,
+  resetAgentPassword,
   setAgentStatus,
   updateAgent,
 } from "./agents.service.js";
@@ -75,9 +78,9 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
         security,
         summary: "Create an agent (SUPER_ADMIN)",
         description:
-          "Creates the agent profile and an AGENT user for `email`. The agent signs in with the Google account for that email; the account is linked on first sign-in.",
+          "Creates the agent profile and an AGENT user for `email`, with a server-generated temporary password returned once in `temporaryPassword`. The agent signs in with their agent code or email and must change the password before using anything else.",
         body: createAgentBodySchema,
-        response: { 201: successSchema(agentWithStatsSchema), ...errorResponses },
+        response: { 201: successSchema(agentCreatedSchema), ...errorResponses },
       },
     },
     async (request, reply) =>
@@ -116,6 +119,23 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) =>
       ok(await setAgentStatus(app.db, request, request.params.id, request.body.status)),
+  );
+
+  app.post(
+    "/:id/reset-password",
+    {
+      preHandler: adminOnly,
+      schema: {
+        tags,
+        security,
+        summary: "Issue a new temporary password (SUPER_ADMIN)",
+        description:
+          "Replaces the agent's password with a new temporary one (returned once), requires a change on next sign-in, and ends all of the agent's sessions.",
+        params: agentIdParamsSchema,
+        response: { 200: successSchema(temporaryPasswordSchema), ...errorResponses },
+      },
+    },
+    async (request) => ok(await resetAgentPassword(app.db, request, request.params.id)),
   );
 
   app.delete(

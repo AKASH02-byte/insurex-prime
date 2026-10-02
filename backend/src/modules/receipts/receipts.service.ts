@@ -6,7 +6,7 @@ import type { AuthContext } from "../../middleware/auth.js";
 import { isSuperAdmin, requireAgentId } from "../../middleware/role.js";
 import { randomCode, withGeneratedCode } from "../../utils/codes.js";
 import { badRequest, conflict, notFound } from "../../utils/errors.js";
-import { toNumber } from "../../utils/format.js";
+import { toDateOnly, toNumber } from "../../utils/format.js";
 import { buildMeta, toDateFilter, toSkipTake } from "../../utils/pagination.js";
 import { containsInsensitive } from "../../utils/search.js";
 import { recordAudit } from "../audit-logs/audit-logs.service.js";
@@ -17,7 +17,10 @@ const receiptInclude = {
     select: {
       id: true,
       policyNumber: true,
-      policy: { select: { policyName: true } },
+      premium: true,
+      issueDate: true,
+      expiryDate: true,
+      policy: { select: { policyName: true, insuranceType: true } },
       customer: { select: { id: true, customerCode: true, fullName: true } },
       agent: { select: { id: true, agentCode: true, fullName: true } },
     },
@@ -33,6 +36,10 @@ const toReceiptDto = (receipt: ReceiptRecord) => ({
     id: receipt.soldPolicy.id,
     policyNumber: receipt.soldPolicy.policyNumber,
     policyName: receipt.soldPolicy.policy.policyName,
+    insuranceType: receipt.soldPolicy.policy.insuranceType,
+    premium: toNumber(receipt.soldPolicy.premium),
+    issueDate: toDateOnly(receipt.soldPolicy.issueDate),
+    expiryDate: toDateOnly(receipt.soldPolicy.expiryDate),
     customer: receipt.soldPolicy.customer,
     agent: receipt.soldPolicy.agent,
   },

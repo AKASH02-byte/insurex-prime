@@ -15,7 +15,7 @@ export const agentSchema = z
     userId: z.uuid(),
     agentCode: z.string(),
     fullName: z.string(),
-    email: z.string().describe("Login (Google) email, stored on the user account"),
+    email: z.string().describe("Account email (sign-in identifier), stored on the user account"),
     phone: z.string(),
     address: z.string().nullable(),
     joinedAt: z.string().describe("YYYY-MM-DD"),
@@ -33,6 +33,18 @@ export const agentWithStatsSchema = agentSchema
     }),
   })
   .meta({ id: "AgentWithStats" });
+
+export const agentCreatedSchema = agentWithStatsSchema
+  .extend({
+    temporaryPassword: z
+      .string()
+      .describe("Shown once. The agent must replace it on first sign-in; it is never retrievable"),
+  })
+  .meta({ id: "AgentCreated" });
+
+export const temporaryPasswordSchema = z
+  .object({ temporaryPassword: z.string() })
+  .meta({ id: "TemporaryPassword" });
 
 export type AgentDto = z.infer<typeof agentSchema>;
 export type AgentWithUser = Agent & { user: { email: string } };
@@ -97,7 +109,7 @@ export const updateAgentBodySchema = createAgentBodySchema
       .max(254)
       .transform((email) => email.toLowerCase())
       .optional()
-      .describe("Changing the email unlinks the current Google sign-in"),
+      .describe("Changing the email changes the sign-in email and unlinks any Google sign-in"),
   })
   .refine((body) => Object.keys(body).length > 0, "at least one field is required");
 

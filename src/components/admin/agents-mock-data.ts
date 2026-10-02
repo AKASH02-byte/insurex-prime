@@ -19,9 +19,8 @@ export interface AgentFull {
   status: "Active" | "Inactive";
   joinDate: string; // ISO date string "YYYY-MM-DD"
   rating: number;
-  specialization: "Health" | "Motor" | "Both";
+  specialization: "Health" | "Motor" | "Both" | "All";
   region: string;
-  licenseNumber: string;
   recentPolicies?: RecentPolicySale[];
   activity?: AgentActivity[];
 }
@@ -54,7 +53,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.9,
     specialization: "Both",
     region: "Mumbai North",
-    licenseNumber: "LIC-MH-2024-0101",
     recentPolicies: recentPolicySalesList.filter((p) => p.agentCode === "AGT-01").slice(0, 3),
     activity: [
       {
@@ -96,7 +94,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.8,
     specialization: "Motor",
     region: "Delhi NCR",
-    licenseNumber: "LIC-UP-2024-0202",
     recentPolicies: recentPolicySalesList.filter((p) => p.agentCode === "AGT-02").slice(0, 3),
     activity: [
       {
@@ -132,7 +129,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.7,
     specialization: "Health",
     region: "Bengaluru South",
-    licenseNumber: "LIC-KA-2024-0303",
     recentPolicies: recentPolicySalesList.filter((p) => p.agentCode === "AGT-03").slice(0, 3),
     activity: [
       {
@@ -162,7 +158,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.6,
     specialization: "Health",
     region: "Ahmedabad Central",
-    licenseNumber: "LIC-GJ-2024-0404",
     activity: [
       {
         id: "a7",
@@ -191,7 +186,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.5,
     specialization: "Motor",
     region: "Kolkata East",
-    licenseNumber: "LIC-WB-2024-0505",
     activity: [
       {
         id: "a8",
@@ -220,7 +214,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.4,
     specialization: "Health",
     region: "Kochi Metro",
-    licenseNumber: "LIC-KL-2024-0606",
     activity: [
       {
         id: "a9",
@@ -249,7 +242,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 3.9,
     specialization: "Both",
     region: "Lucknow Central",
-    licenseNumber: "LIC-UP-2024-0707",
     activity: [
       {
         id: "a10",
@@ -278,7 +270,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.5,
     specialization: "Health",
     region: "Chennai South",
-    licenseNumber: "LIC-TN-2024-0808",
     activity: [
       {
         id: "a11",
@@ -307,7 +298,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 3.7,
     specialization: "Motor",
     region: "Pune West",
-    licenseNumber: "LIC-MH-2025-0909",
     activity: [
       {
         id: "a12",
@@ -336,7 +326,6 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.6,
     specialization: "Both",
     region: "Hyderabad West",
-    licenseNumber: "LIC-TS-2024-1010",
     activity: [
       {
         id: "a13",

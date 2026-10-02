@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgentRouteRouteImport } from './routes/agent/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminAgentsRouteImport } from './routes/admin/agents'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
@@ -19,11 +20,23 @@ import { Route as AdminReceiptsRouteImport } from './routes/admin/receipts'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminSoldPoliciesRouteImport } from './routes/admin/sold-policies'
+import { Route as AgentIndexRouteImport } from './routes/agent/index'
+import { Route as AgentChangePasswordRouteImport } from './routes/agent/change-password'
+import { Route as AgentCustomersRouteImport } from './routes/agent/customers'
 import { Route as AgentDashboardRouteImport } from './routes/agent/dashboard'
+import { Route as AgentPoliciesRouteImport } from './routes/agent/policies'
+import { Route as AgentProfileRouteImport } from './routes/agent/profile'
+import { Route as AgentSellPolicyRouteImport } from './routes/agent/sell-policy'
+import { Route as AgentSoldPoliciesRouteImport } from './routes/agent/sold-policies'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentRouteRoute = AgentRouteRouteImport.update({
+  id: '/agent',
+  path: '/agent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -71,14 +84,50 @@ const AdminSoldPoliciesRoute = AdminSoldPoliciesRouteImport.update({
   path: '/admin/sold-policies',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentIndexRoute = AgentIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
+const AgentChangePasswordRoute = AgentChangePasswordRouteImport.update({
+  id: '/change-password',
+  path: '/change-password',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
+const AgentCustomersRoute = AgentCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
 const AgentDashboardRoute = AgentDashboardRouteImport.update({
-  id: '/agent/dashboard',
-  path: '/agent/dashboard',
-  getParentRoute: () => rootRouteImport,
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
+const AgentPoliciesRoute = AgentPoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
+const AgentProfileRoute = AgentProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
+const AgentSellPolicyRoute = AgentSellPolicyRouteImport.update({
+  id: '/sell-policy',
+  path: '/sell-policy',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
+const AgentSoldPoliciesRoute = AgentSoldPoliciesRouteImport.update({
+  id: '/sold-policies',
+  path: '/sold-policies',
+  getParentRoute: () => AgentRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agent': typeof AgentRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/customers': typeof AdminCustomersRoute
@@ -88,7 +137,14 @@ export interface FileRoutesByFullPath {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/sold-policies': typeof AdminSoldPoliciesRoute
+  '/agent/change-password': typeof AgentChangePasswordRoute
+  '/agent/customers': typeof AgentCustomersRoute
   '/agent/dashboard': typeof AgentDashboardRoute
+  '/agent/policies': typeof AgentPoliciesRoute
+  '/agent/profile': typeof AgentProfileRoute
+  '/agent/sell-policy': typeof AgentSellPolicyRoute
+  '/agent/sold-policies': typeof AgentSoldPoliciesRoute
+  '/agent/': typeof AgentIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -101,11 +157,19 @@ export interface FileRoutesByTo {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/sold-policies': typeof AdminSoldPoliciesRoute
+  '/agent/change-password': typeof AgentChangePasswordRoute
+  '/agent/customers': typeof AgentCustomersRoute
   '/agent/dashboard': typeof AgentDashboardRoute
+  '/agent/policies': typeof AgentPoliciesRoute
+  '/agent/profile': typeof AgentProfileRoute
+  '/agent/sell-policy': typeof AgentSellPolicyRoute
+  '/agent/sold-policies': typeof AgentSoldPoliciesRoute
+  '/agent': typeof AgentIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agent': typeof AgentRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/customers': typeof AdminCustomersRoute
@@ -115,12 +179,20 @@ export interface FileRoutesById {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/sold-policies': typeof AdminSoldPoliciesRoute
+  '/agent/change-password': typeof AgentChangePasswordRoute
+  '/agent/customers': typeof AgentCustomersRoute
   '/agent/dashboard': typeof AgentDashboardRoute
+  '/agent/policies': typeof AgentPoliciesRoute
+  '/agent/profile': typeof AgentProfileRoute
+  '/agent/sell-policy': typeof AgentSellPolicyRoute
+  '/agent/sold-policies': typeof AgentSoldPoliciesRoute
+  '/agent/': typeof AgentIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agent'
     | '/login'
     | '/admin/agents'
     | '/admin/customers'
@@ -130,7 +202,14 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/sold-policies'
+    | '/agent/change-password'
+    | '/agent/customers'
     | '/agent/dashboard'
+    | '/agent/policies'
+    | '/agent/profile'
+    | '/agent/sell-policy'
+    | '/agent/sold-policies'
+    | '/agent/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -143,10 +222,18 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/sold-policies'
+    | '/agent/change-password'
+    | '/agent/customers'
     | '/agent/dashboard'
+    | '/agent/policies'
+    | '/agent/profile'
+    | '/agent/sell-policy'
+    | '/agent/sold-policies'
+    | '/agent'
   id:
     | '__root__'
     | '/'
+    | '/agent'
     | '/login'
     | '/admin/agents'
     | '/admin/customers'
@@ -156,11 +243,19 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/sold-policies'
+    | '/agent/change-password'
+    | '/agent/customers'
     | '/agent/dashboard'
+    | '/agent/policies'
+    | '/agent/profile'
+    | '/agent/sell-policy'
+    | '/agent/sold-policies'
+    | '/agent/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentRouteRoute: typeof AgentRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
   AdminAgentsRoute: typeof AdminAgentsRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
@@ -170,7 +265,6 @@ export interface RootRouteChildren {
   AdminReportsRoute: typeof AdminReportsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminSoldPoliciesRoute: typeof AdminSoldPoliciesRoute
-  AgentDashboardRoute: typeof AgentDashboardRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -180,6 +274,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agent': {
+      id: '/agent'
+      path: '/agent'
+      fullPath: '/agent'
+      preLoaderRoute: typeof AgentRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -245,18 +346,94 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSoldPoliciesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agent/': {
+      id: '/agent/'
+      path: '/'
+      fullPath: '/agent/'
+      preLoaderRoute: typeof AgentIndexRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
+    '/agent/change-password': {
+      id: '/agent/change-password'
+      path: '/change-password'
+      fullPath: '/agent/change-password'
+      preLoaderRoute: typeof AgentChangePasswordRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
+    '/agent/customers': {
+      id: '/agent/customers'
+      path: '/customers'
+      fullPath: '/agent/customers'
+      preLoaderRoute: typeof AgentCustomersRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
     '/agent/dashboard': {
       id: '/agent/dashboard'
-      path: '/agent/dashboard'
+      path: '/dashboard'
       fullPath: '/agent/dashboard'
       preLoaderRoute: typeof AgentDashboardRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
+    '/agent/policies': {
+      id: '/agent/policies'
+      path: '/policies'
+      fullPath: '/agent/policies'
+      preLoaderRoute: typeof AgentPoliciesRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
+    '/agent/profile': {
+      id: '/agent/profile'
+      path: '/profile'
+      fullPath: '/agent/profile'
+      preLoaderRoute: typeof AgentProfileRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
+    '/agent/sell-policy': {
+      id: '/agent/sell-policy'
+      path: '/sell-policy'
+      fullPath: '/agent/sell-policy'
+      preLoaderRoute: typeof AgentSellPolicyRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
+    '/agent/sold-policies': {
+      id: '/agent/sold-policies'
+      path: '/sold-policies'
+      fullPath: '/agent/sold-policies'
+      preLoaderRoute: typeof AgentSoldPoliciesRouteImport
+      parentRoute: typeof AgentRouteRoute
     }
   }
 }
 
+interface AgentRouteRouteChildren {
+  AgentChangePasswordRoute: typeof AgentChangePasswordRoute
+  AgentCustomersRoute: typeof AgentCustomersRoute
+  AgentDashboardRoute: typeof AgentDashboardRoute
+  AgentPoliciesRoute: typeof AgentPoliciesRoute
+  AgentProfileRoute: typeof AgentProfileRoute
+  AgentSellPolicyRoute: typeof AgentSellPolicyRoute
+  AgentSoldPoliciesRoute: typeof AgentSoldPoliciesRoute
+  AgentIndexRoute: typeof AgentIndexRoute
+}
+
+const AgentRouteRouteChildren: AgentRouteRouteChildren = {
+  AgentChangePasswordRoute: AgentChangePasswordRoute,
+  AgentCustomersRoute: AgentCustomersRoute,
+  AgentDashboardRoute: AgentDashboardRoute,
+  AgentPoliciesRoute: AgentPoliciesRoute,
+  AgentProfileRoute: AgentProfileRoute,
+  AgentSellPolicyRoute: AgentSellPolicyRoute,
+  AgentSoldPoliciesRoute: AgentSoldPoliciesRoute,
+  AgentIndexRoute: AgentIndexRoute,
+}
+
+const AgentRouteRouteWithChildren = AgentRouteRoute._addFileChildren(
+  AgentRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentRouteRoute: AgentRouteRouteWithChildren,
   LoginRoute: LoginRoute,
   AdminAgentsRoute: AdminAgentsRoute,
   AdminCustomersRoute: AdminCustomersRoute,
@@ -266,7 +443,6 @@ const rootRouteChildren: RootRouteChildren = {
   AdminReportsRoute: AdminReportsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminSoldPoliciesRoute: AdminSoldPoliciesRoute,
-  AgentDashboardRoute: AgentDashboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

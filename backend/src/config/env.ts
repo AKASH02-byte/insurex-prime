@@ -27,6 +27,9 @@ const envSchema = z
     DATABASE_URL: z
       .string()
       .regex(/^postgres(ql)?:\/\//, "must be a postgresql:// connection string"),
+    // Max PostgreSQL connections per process. Leave unset for the driver default (10);
+    // set to 1 for single-connection local databases such as PGlite.
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).optional(),
     FIREBASE_PROJECT_ID: z.string().min(1),
     FIREBASE_CLIENT_EMAIL: optionalString,
     FIREBASE_PRIVATE_KEY: optionalString,
@@ -43,6 +46,15 @@ const envSchema = z
       .enum(["true", "false"])
       .default("true")
       .transform((value) => value === "true"),
+    // Agent password sign-in sessions (HttpOnly cookie).
+    AGENT_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
+    // "lax" works when the frontend and API share a site (localhost, or app./api. subdomains).
+    // Use "none" only when they are on different sites; it requires Secure cookies (HTTPS).
+    AGENT_COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
+    // Defaults to true in production.
+    AGENT_COOKIE_SECURE: z.enum(["true", "false"]).optional(),
+    // Optional cookie Domain, e.g. ".example.com" to share it across subdomains.
+    AGENT_COOKIE_DOMAIN: optionalString,
   })
   .superRefine((env, ctx) => {
     if (Boolean(env.FIREBASE_CLIENT_EMAIL) !== Boolean(env.FIREBASE_PRIVATE_KEY)) {
@@ -74,6 +86,16 @@ const envSchema = z
         });
       }
     }
+    const secureCookie = env.AGENT_COOKIE_SECURE
+      ? env.AGENT_COOKIE_SECURE === "true"
+      : env.NODE_ENV === "production";
+    if (env.AGENT_COOKIE_SAMESITE === "none" && !secureCookie) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["AGENT_COOKIE_SECURE"],
+        message: "must be true when AGENT_COOKIE_SAMESITE=none",
+      });
+    }
     if (env.NODE_ENV === "production" && env.FRONTEND_URL.length === 0) {
       ctx.addIssue({
         code: "custom",
@@ -85,6 +107,9 @@ const envSchema = z
   .transform((env) => ({
     ...env,
     FIREBASE_PRIVATE_KEY: normalizePrivateKey(env.FIREBASE_PRIVATE_KEY),
+    AGENT_COOKIE_SECURE: env.AGENT_COOKIE_SECURE
+      ? env.AGENT_COOKIE_SECURE === "true"
+      : env.NODE_ENV === "production",
   }));
 
 export type Env = z.infer<typeof envSchema>;

@@ -8,7 +8,7 @@ TanStack Start frontend (repository root) and is deployed separately.
 | HTTP           | Fastify 5                                                      |
 | Validation     | Zod 4 via `fastify-type-provider-zod` (requests and responses) |
 | Database       | PostgreSQL + Prisma 7 (`@prisma/adapter-pg`)                   |
-| Authentication | Firebase ID tokens verified with the Firebase Admin SDK        |
+| Authentication | Firebase ID tokens (Super Admin); agent password + session cookie |
 | Docs           | OpenAPI 3.1 + Swagger UI at `/docs`                            |
 | Tests          | Vitest (unit + PostgreSQL integration)                         |
 
@@ -27,6 +27,15 @@ npm run dev                   # http://localhost:4000
 
 - Health: `GET http://localhost:4000/api/v1/health`
 - API docs: `http://localhost:4000/docs` (raw spec at `/docs/json`)
+
+No Postgres installed? The bundled PGlite server works for local development:
+
+```bash
+node node_modules/@electric-sql/pglite-socket/dist/scripts/server.js \
+  --host=:: --port=54329 --max-connections=4 --db=./.pglite/dev   # data kept in .pglite/ (gitignored)
+# .env: DATABASE_URL=postgresql://user:pass@localhost:54329/insurex_dev?sslmode=disable
+#       DATABASE_POOL_MAX=1   (PGlite mixes up concurrent connections)
+```
 
 Any PostgreSQL works: a local install (`brew install postgresql@17`), Docker
 (`docker run -e POSTGRES_PASSWORD=… -p 5432:5432 postgres:17`), or a hosted
@@ -54,7 +63,8 @@ frontend or prefix them with `VITE_`.
 
 | Variable                                         | Required | Notes                                                                                                                       |
 | ------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                   | yes      | `postgresql://…`                                                                                                            |
+| `DATABASE_URL`                                   | yes      | `postgresql://…` (add `?sslmode=disable` for local servers without SSL, e.g. PGlite)                                        |
+| `DATABASE_POOL_MAX`                              | no       | Max DB connections per process (driver default 10). Use `1` with PGlite                                                     |
 | `FIREBASE_PROJECT_ID`                            | yes      | Same Firebase project as the frontend (`VITE_FIREBASE_PROJECT_ID`)                                                          |
 | `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` | no       | Service account. Token verification works without it; with it, revoked tokens are rejected too. Literal `\n` is normalized. |
 | `FRONTEND_URL`                                   | prod     | Comma-separated CORS origins, e.g. `http://localhost:8080,https://insurex-prime.vercel.app`. `*` is rejected in production. |
@@ -62,6 +72,10 @@ frontend or prefix them with `VITE_`.
 | `PORT`, `HOST`, `LOG_LEVEL`, `NODE_ENV`          | no       | Defaults: `4000`, `0.0.0.0`, `info`, `development`                                                                          |
 | `TRUST_PROXY`                                    | no       | `true` behind a trusted load balancer so audit-log IPs are correct                                                          |
 | `DOCS_ENABLED`                                   | no       | `false` hides `/docs`                                                                                                       |
+| `AGENT_SESSION_TTL_HOURS`                        | no       | Agent session lifetime. Default `12`                                                                                        |
+| `AGENT_COOKIE_SAMESITE`                          | no       | `lax` (default), `strict` or `none`. `none` needs `AGENT_COOKIE_SECURE=true` (see Deployment)                               |
+| `AGENT_COOKIE_SECURE`                            | no       | Secure cookie flag. Default `true` in production, `false` otherwise                                                         |
+| `AGENT_COOKIE_DOMAIN`                            | no       | Cookie `Domain`, e.g. `.example.com` to share across subdomains                                                             |
 
 Invalid configuration stops the server at startup with a list of the offending
 variable **names** (values are never printed).
@@ -73,6 +87,31 @@ Google sign-in (frontend) → Firebase → ID token
   → Authorization: Bearer <Firebase ID token>
   → Firebase Admin verifyIdToken → user + role looked up in PostgreSQL → authorized request
 ```
+
+### Agent sign-in (agent code or email + password)
+
+```
+POST /auth/agent/login { identifier, password }
+  → scrypt password check → session row (SHA-256 of token) → Set-Cookie: insurex_agent_session (HttpOnly)
+  → browser sends the cookie with credentials: "include" → user, role and status re-read on every request
+```
+
+- **Passwords:** `POST /agents` returns a server-generated temporary password **once**
+  (`temporaryPassword`); only its scrypt hash is stored. `POST /agents/:id/reset-password`
+  issues a new one. Agents with a temporary password get `mustChangePassword: true` and
+  every endpoint except `/auth/me`, `/auth/agent/change-password` and `/auth/agent/logout`
+  returns `403 PASSWORD_CHANGE_REQUIRED` until they choose their own
+  (8–128 characters, a letter and a number).
+- **Responses:** unknown account or wrong password → `401 INVALID_CREDENTIALS` (same message,
+  same timing); correct password for an inactive/suspended agent → `403 ACCOUNT_DISABLED`;
+  five failures in 15 minutes per client + identifier → `429`.
+- **Sessions:** 12 hours (`AGENT_SESSION_TTL_HOURS`). Logout, password change/reset and
+  suspension revoke them in the database. Cookie-authenticated writes must come from an
+  origin in `FRONTEND_URL` (CSRF defence on top of `SameSite`). A bearer token, when sent,
+  takes precedence over the cookie.
+- **Demo data:** `npm run db:seed` gives the fictional agents `AGT-DEMO1`…`AGT-DEMO4`
+  (or `demo.agent1@example.com`…) the password `DemoAgent@2026`; `AGT-DEMO4` must change it
+  on first sign-in and `AGT-DEMO5` is inactive.
 
 The role is **always** read from the database. Nothing in the request body,
 query or token claims can grant a role or choose another agent's data.
@@ -97,10 +136,11 @@ The frontend should call `POST /api/v1/auth/verify` once after sign-in and
 | Customers                               | all         | only their own; new ones auto-assigned |
 | Policies (catalog)                      | full CRUD   | read ACTIVE only                       |
 | Sold policies: list / read              | all         | their own                              |
-| Sold policies: create                   | ✅          | own customers, catalog premium only    |
+| Sold policies: create / quote           | ✅          | own customers, catalog premium only, issue date −30…+90 days; `paymentMethod` creates the receipt |
 | Sold policies: update                   | ✅          | ❌                                     |
 | Receipts: list / read / create          | all         | their own sales                        |
 | Dashboard                               | platform    | their own figures                      |
+| `GET /agent/dashboard`, `/agent/profile` | ❌          | ✅ (own data; profile: name/phone/address) |
 | Reports, audit logs                     | ✅          | ❌                                     |
 
 Records with history are protected: deleting an agent, customer or policy that
@@ -108,7 +148,8 @@ has sales returns `409` — deactivate it instead.
 
 ## API conventions
 
-- Base path `/api/v1`. All endpoints except `/health` require a bearer token.
+- Base path `/api/v1`. All endpoints except `/health` and agent login/logout require a
+  Firebase bearer token or the agent session cookie.
 - Success: `{ "success": true, "data": … }` — lists add
   `"meta": { "page", "limit", "total", "totalPages" }`.
 - Error: `{ "success": false, "error": { "code", "message", "requestId" } }`.
@@ -174,9 +215,21 @@ Google sign-in is required).
 Any Node host that runs a long-lived process works (Render, Railway, Fly.io,
 Cloud Run, a VM). Then point the frontend at it with `VITE_API_BASE_URL`.
 
+### Agent cookies in production
+
+The agent session is a cookie set by the API, so the browser must treat the API as
+first-party. Host the API on the same site as the frontend (e.g. `app.example.com` and
+`api.example.com`, `AGENT_COOKIE_SAMESITE=lax`). If they must be on different sites (e.g.
+`*.vercel.app` + `*.onrender.com`), set `AGENT_COOKIE_SAMESITE=none` and
+`AGENT_COOKIE_SECURE=true` — but Safari and other browsers that block third-party cookies
+will not keep the session, so prefer a shared site or a proxy.
+
 ## Known limitations / next steps
 
-- No rate limiting yet — add `@fastify/rate-limit` (or rate-limit at the edge).
+- Login rate limiting is in-memory per process; with several instances, add
+  `@fastify/rate-limit` with a shared store (or rate-limit at the edge).
+- Expired agent session rows are not purged yet; a periodic
+  `DELETE FROM agent_sessions WHERE "expiresAt" < now() - interval '7 days'` is enough.
 - Search uses `ILIKE '%term%'`; add `pg_trgm` indexes if tables grow large.
 - `@prisma/adapter-pg` 7.10 emits a `pg` deprecation warning inside transactions
   (upstream; harmless on `pg` 8).

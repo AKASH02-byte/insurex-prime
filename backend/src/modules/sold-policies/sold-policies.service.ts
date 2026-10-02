@@ -1,7 +1,7 @@
 import type { FastifyRequest } from "fastify";
 import type { z } from "zod";
 import type { Database } from "../../config/database.js";
-import type { Prisma } from "../../generated/prisma/client.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import type { AuthContext } from "../../middleware/auth.js";
 import { isSuperAdmin, requireAgentId } from "../../middleware/role.js";
 import { randomCode, withGeneratedCode } from "../../utils/codes.js";
@@ -13,6 +13,7 @@ import { changedFields, recordAudit } from "../audit-logs/audit-logs.service.js"
 import type {
   createSoldPolicyBodySchema,
   listSoldPoliciesQuerySchema,
+  quoteSoldPolicyQuerySchema,
   updateSoldPolicyBodySchema,
 } from "./sold-policies.schemas.js";
 
@@ -123,12 +124,22 @@ export function computeExpiryDate(issueDate: Date, durationMonths: number): Date
   return expiry;
 }
 
-export async function createSoldPolicy(
-  db: Database,
-  auth: AuthContext,
-  request: FastifyRequest,
-  body: z.infer<typeof createSoldPolicyBodySchema>,
-) {
+/** How far an AGENT may back- or forward-date a sale's issue date. */
+export const AGENT_ISSUE_DATE_WINDOW = { pastDays: 30, futureDays: 90 } as const;
+
+const DAY_MS = 86_400_000;
+
+type SaleInput = Pick<
+  z.infer<typeof createSoldPolicyBodySchema>,
+  "policyId" | "customerId" | "issueDate" | "agentId" | "premium"
+>;
+
+/**
+ * Everything about a sale that the server decides: the selling agent, customer
+ * ownership, policy validity, premium, issue/expiry dates. Shared by the quote and
+ * the sale itself so the agent sees exactly what will be recorded.
+ */
+export async function resolveSale(db: Database, auth: AuthContext, body: SaleInput) {
   const admin = isSuperAdmin(auth);
 
   const policy = await db.policy.findUnique({ where: { id: body.policyId } });
@@ -139,6 +150,9 @@ export async function createSoldPolicy(
   // Agents may only sell to their own customers; hide others' customers entirely.
   if (!customer || (!admin && customer.assignedAgentId !== auth.agentId)) {
     throw notFound("Customer");
+  }
+  if (customer.status === "INACTIVE") {
+    throw conflict("Policies cannot be sold to an INACTIVE customer.");
   }
 
   let agentId: string;
@@ -156,17 +170,77 @@ export async function createSoldPolicy(
       throw badRequest("Sales can only be recorded for ACTIVE agents.");
     agentId = requested;
   } else {
+    // The authenticate hook has already checked that this agent is ACTIVE.
     agentId = requireAgentId(auth);
   }
   if (!admin && body.premium !== undefined) {
     throw forbidden("Agents cannot override the catalog premium.");
   }
 
-  const issueDate = body.issueDate
-    ? parseDateOnly(body.issueDate)
-    : parseDateOnly(new Date().toISOString());
-  const expiryDate = computeExpiryDate(issueDate, policy.durationMonths);
+  const today = parseDateOnly(new Date().toISOString());
+  const issueDate = body.issueDate ? parseDateOnly(body.issueDate) : today;
+  if (Number.isNaN(issueDate.getTime())) throw badRequest("issueDate is not a valid date.");
+  if (!admin) {
+    const earliest = new Date(today.getTime() - AGENT_ISSUE_DATE_WINDOW.pastDays * DAY_MS);
+    const latest = new Date(today.getTime() + AGENT_ISSUE_DATE_WINDOW.futureDays * DAY_MS);
+    if (issueDate < earliest || issueDate > latest) {
+      throw badRequest(
+        `The issue date must be between ${toDateOnly(earliest)} and ${toDateOnly(latest)}.`,
+      );
+    }
+  }
+
+  return {
+    policy,
+    customer,
+    agentId,
+    premium: body.premium !== undefined ? new Prisma.Decimal(body.premium) : policy.premium,
+    issueDate,
+    expiryDate: computeExpiryDate(issueDate, policy.durationMonths),
+  };
+}
+
+/** Server-side preview of a sale (premium, expiry). Records nothing. */
+export async function quoteSoldPolicy(
+  db: Database,
+  auth: AuthContext,
+  query: z.infer<typeof quoteSoldPolicyQuerySchema>,
+) {
+  const sale = await resolveSale(db, auth, query);
+  return {
+    policy: {
+      id: sale.policy.id,
+      policyCode: sale.policy.policyCode,
+      policyName: sale.policy.policyName,
+      insuranceType: sale.policy.insuranceType,
+      coverageAmount: toNumber(sale.policy.coverageAmount),
+      premiumFrequency: sale.policy.premiumFrequency,
+      durationMonths: sale.policy.durationMonths,
+    },
+    customer: {
+      id: sale.customer.id,
+      customerCode: sale.customer.customerCode,
+      fullName: sale.customer.fullName,
+    },
+    premium: toNumber(sale.premium),
+    issueDate: toDateOnly(sale.issueDate),
+    expiryDate: toDateOnly(sale.expiryDate),
+  };
+}
+
+export async function createSoldPolicy(
+  db: Database,
+  auth: AuthContext,
+  request: FastifyRequest,
+  body: z.infer<typeof createSoldPolicyBodySchema>,
+) {
+  const { policy, customer, agentId, premium, issueDate, expiryDate } = await resolveSale(
+    db,
+    auth,
+    body,
+  );
   const year = issueDate.getUTCFullYear();
+  const receiptYear = new Date().getUTCFullYear();
 
   const sold = await withGeneratedCode(
     () => randomCode(`POL-${year}`, 8),
@@ -178,12 +252,30 @@ export async function createSoldPolicy(
             policyId: policy.id,
             customerId: customer.id,
             agentId,
-            premium: body.premium ?? policy.premium,
+            premium,
             issueDate,
             expiryDate,
+            // Paid in full at the point of sale: the policy is in force straight away.
+            ...(body.paymentMethod || body.paymentStatus === "PAID"
+              ? { paymentStatus: "PAID", policyStatus: "ACTIVE" }
+              : body.paymentStatus
+                ? { paymentStatus: body.paymentStatus }
+                : {}),
           },
-          include: soldPolicyInclude,
         });
+        let receiptNumber: string | undefined;
+        if (body.paymentMethod) {
+          receiptNumber = randomCode(`RCP-${receiptYear}`, 8);
+          await tx.receipt.create({
+            data: {
+              receiptNumber,
+              soldPolicyId: created.id,
+              amount: premium,
+              paymentMethod: body.paymentMethod,
+              paymentStatus: "PAID",
+            },
+          });
+        }
         await recordAudit(tx, request, {
           action: "soldPolicy.create",
           entity: "SoldPolicy",
@@ -193,9 +285,13 @@ export async function createSoldPolicy(
             policyCode: policy.policyCode,
             customerId: customer.id,
             agentId,
+            ...(receiptNumber ? { receiptNumber } : {}),
           },
         });
-        return created;
+        return tx.soldPolicy.findUniqueOrThrow({
+          where: { id: created.id },
+          include: soldPolicyInclude,
+        });
       }),
   );
   return toSoldPolicyDetailDto(sold);

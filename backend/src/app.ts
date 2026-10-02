@@ -74,8 +74,8 @@ export async function buildApp(deps: AppDependencies) {
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Authorization", "Content-Type", REQUEST_ID_HEADER],
     exposedHeaders: [REQUEST_ID_HEADER],
-    // Auth uses bearer tokens, not cookies.
-    credentials: false,
+    // Agents authenticate with an HttpOnly session cookie; Super Admins with bearer tokens.
+    credentials: true,
     maxAge: 600,
   });
 
@@ -92,6 +92,8 @@ export async function buildApp(deps: AppDependencies) {
             "**Authentication:** send a Firebase ID token from the signed-in frontend user as",
             "`Authorization: Bearer <Firebase ID token>`. The token is verified with the Firebase",
             "Admin SDK; the caller's role is always read from the database, never from the client.",
+            "Agents sign in with `POST /api/v1/auth/agent/login` (agent code or email + password),",
+            "which sets an HttpOnly session cookie that the browser sends with `credentials: include`.",
             "",
             "**Roles:** `SUPER_ADMIN` has full access. `AGENT` is limited to their own profile,",
             "customers, sold policies and receipts, and can read ACTIVE catalog policies only.",
@@ -112,7 +114,11 @@ export async function buildApp(deps: AppDependencies) {
         },
         tags: [
           { name: "Health", description: "Service status" },
-          { name: "Auth", description: "Firebase token verification and current user" },
+          {
+            name: "Auth",
+            description: "Firebase token verification, agent sign-in and current user",
+          },
+          { name: "Agent Portal", description: "The signed-in agent's dashboard and profile" },
           {
             name: "Agents",
             description: "Agent management (SUPER_ADMIN; agents can read themselves)",

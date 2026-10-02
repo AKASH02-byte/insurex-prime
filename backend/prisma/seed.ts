@@ -7,10 +7,13 @@
  * Refuses to run when NODE_ENV=production.
  *
  * Real Super Admins are provisioned through SUPER_ADMIN_EMAILS on first sign-in.
- * Demo agents can only sign in if their email belongs to a real Google account,
- * so to test as an agent, update a demo agent's email to one you control.
+ * Demo agents sign in at /login → Agent with their agent code (AGT-DEMO1…) or email
+ * (demo.agent1@example.com…) and the password in DEMO_AGENT_PASSWORD below. AGT-DEMO4
+ * is flagged to change it on first sign-in; AGT-DEMO5 is INACTIVE and cannot sign in.
+ * Re-running the seed resets the demo agents' passwords.
  */
 import { createDatabase } from "../src/config/database.js";
+import { hashPassword } from "../src/modules/auth/password.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import type {
   InsuranceType,
@@ -30,6 +33,9 @@ if (!process.env.DATABASE_URL) {
 }
 
 const db = createDatabase(process.env.DATABASE_URL);
+
+/** Development-only shared password for the fictional demo agents. */
+const DEMO_AGENT_PASSWORD = "DemoAgent@2026";
 
 const DAY = 86_400_000;
 const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
@@ -327,12 +333,14 @@ async function main() {
   });
 
   const agentIds: string[] = [];
+  const passwordHash = await hashPassword(DEMO_AGENT_PASSWORD);
   for (const [index, agent] of agents.entries()) {
     const email = `demo.agent${index + 1}@example.com`;
+    const credentials = { passwordHash, mustChangePassword: index === 3 };
     const user = await db.user.upsert({
       where: { email },
-      update: {},
-      create: { email, role: "AGENT" },
+      update: credentials,
+      create: { email, role: "AGENT", ...credentials },
     });
     const saved = await db.agent.upsert({
       where: { agentCode: agent.agentCode },
@@ -452,6 +460,9 @@ async function main() {
     receipts: await db.receipt.count(),
   };
   console.warn("Demo data ready:", counts);
+  console.warn(
+    `Demo agent sign-in: AGT-DEMO1 (or demo.agent1@example.com) / ${DEMO_AGENT_PASSWORD}`,
+  );
 }
 
 main()

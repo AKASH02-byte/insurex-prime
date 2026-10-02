@@ -92,6 +92,7 @@ const SPEC_COLORS = {
   Health: "bg-primary/10 text-primary border-primary/20",
   Motor: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   Both: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20",
+  All: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -194,9 +195,8 @@ interface AgentFormData {
   joinDate: string;
   status: "Active" | "Inactive";
   tempPassword: string;
-  specialization: "Health" | "Motor" | "Both";
+  specialization: "Health" | "Motor" | "Both" | "All";
   region: string;
-  licenseNumber: string;
 }
 
 const emptyForm: AgentFormData = {
@@ -212,7 +212,6 @@ const emptyForm: AgentFormData = {
   tempPassword: "",
   specialization: "Both",
   region: "",
-  licenseNumber: "",
 };
 
 function toFormData(agent: AgentFull): AgentFormData {
@@ -229,7 +228,6 @@ function toFormData(agent: AgentFull): AgentFormData {
     tempPassword: "",
     specialization: agent.specialization,
     region: agent.region,
-    licenseNumber: agent.licenseNumber,
   };
 }
 
@@ -247,6 +245,8 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
   const set = (key: keyof AgentFormData, val: string) =>
     setForm((prev) => ({ ...prev, [key]: val }));
 
+  const isAdd = mode === "add";
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.phone) {
@@ -259,8 +259,6 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
       onSubmit(form);
     }, 600);
   };
-
-  const isAdd = mode === "add";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -294,7 +292,7 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
             </div>
             <div>
               <Label htmlFor="af-code" className="text-xs font-bold uppercase tracking-wider">
-                Agent ID / Code <span className="text-destructive">*</span>
+                Producer Code <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="af-code"
@@ -396,6 +394,7 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
                 <option value="Health">Health Insurance</option>
                 <option value="Motor">Motor Insurance</option>
                 <option value="Both">Both</option>
+                <option value="All">All</option>
               </select>
             </div>
             <div>
@@ -412,20 +411,8 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
             </div>
           </div>
 
-          {/* License + Join Date */}
+          {/* Join Date */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="af-license" className="text-xs font-bold uppercase tracking-wider">
-                License Number
-              </Label>
-              <Input
-                id="af-license"
-                value={form.licenseNumber}
-                onChange={(e) => set("licenseNumber", e.target.value)}
-                placeholder="LIC-MH-2024-XXXX"
-                className="mt-1 h-10 rounded-xl"
-              />
-            </div>
             <div>
               <Label htmlFor="af-join" className="text-xs font-bold uppercase tracking-wider">
                 Date of Joining
@@ -463,13 +450,14 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
                 </Label>
                 <Input
                   id="af-pass"
-                  type="password"
-                  value={form.tempPassword}
-                  onChange={(e) => set("tempPassword", e.target.value)}
-                  placeholder="Min 8 characters"
-                  className="mt-1 h-10 rounded-xl"
-                  required={isAdd}
+                  value=""
+                  placeholder="Generated securely by the server"
+                  className="mt-1 h-10 rounded-xl bg-muted/50"
+                  readOnly
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Shown once after the agent is created; they must change it at first sign-in.
+                </p>
               </div>
             )}
           </div>
@@ -594,7 +582,6 @@ function AgentDetailDrawer({
                 label: "Address",
                 value: `${agent.address}, ${agent.city}, ${agent.state} — ${agent.pincode}`,
               },
-              { icon: Shield, label: "License", value: agent.licenseNumber },
               { icon: MapPin, label: "Region", value: agent.region },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-3">
@@ -911,7 +898,6 @@ function AdminAgentsPage() {
       rating: 4.0,
       specialization: data.specialization,
       region: data.region,
-      licenseNumber: data.licenseNumber,
       activity: [
         {
           id: `act-${Date.now()}`,
@@ -941,7 +927,6 @@ function AdminAgentsPage() {
               status: data.status,
               specialization: data.specialization,
               region: data.region,
-              licenseNumber: data.licenseNumber,
             }
           : a,
       ),
@@ -961,7 +946,6 @@ function AdminAgentsPage() {
               status: data.status,
               specialization: data.specialization,
               region: data.region,
-              licenseNumber: data.licenseNumber,
             }
           : prev,
       );

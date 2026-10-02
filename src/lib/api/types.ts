@@ -7,7 +7,7 @@ export type CustomerStatus = "ACTIVE" | "PENDING" | "INACTIVE";
 export type Gender = "MALE" | "FEMALE" | "OTHER";
 export type PolicyStatus = "ACTIVE" | "INACTIVE";
 export type PremiumFrequency = "MONTHLY" | "QUARTERLY" | "HALF_YEARLY" | "ANNUAL";
-export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+export type PaymentStatus = "PENDING" | "DUE" | "PAID" | "FAILED" | "REFUNDED";
 export type SoldPolicyStatus = "PENDING" | "ACTIVE" | "EXPIRED" | "CANCELLED";
 export type PaymentMethod = "CASH" | "CARD" | "UPI" | "NET_BANKING" | "BANK_TRANSFER" | "CHEQUE";
 
@@ -35,6 +35,8 @@ export interface CurrentUser {
   role: Role;
   status: "ACTIVE" | "DISABLED";
   lastLoginAt: string | null;
+  /** Signed in with a temporary password: must change it before anything else. */
+  mustChangePassword: boolean;
   agent: ApiAgent | null;
 }
 
@@ -56,6 +58,23 @@ export interface ApiCustomer {
   policiesCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CustomerPolicySummary {
+  id: string;
+  policyNumber: string;
+  policyName: string;
+  insuranceType: InsuranceType;
+  premium: number;
+  issueDate: string;
+  expiryDate: string;
+  paymentStatus: PaymentStatus;
+  policyStatus: SoldPolicyStatus;
+  agent: AgentRef;
+}
+
+export interface ApiCustomerDetail extends ApiCustomer {
+  policies: CustomerPolicySummary[];
 }
 
 export interface HealthDetails {
@@ -115,6 +134,35 @@ export interface ApiSoldPolicy {
   updatedAt: string;
 }
 
+export interface ApiReceiptSummary {
+  id: string;
+  receiptNumber: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  issuedAt: string;
+}
+
+export interface ApiSoldPolicyDetail extends ApiSoldPolicy {
+  receipts: ApiReceiptSummary[];
+}
+
+export interface SoldPolicyQuote {
+  policy: {
+    id: string;
+    policyCode: string;
+    policyName: string;
+    insuranceType: InsuranceType;
+    coverageAmount: number;
+    premiumFrequency: PremiumFrequency;
+    durationMonths: number;
+  };
+  customer: { id: string; customerCode: string; fullName: string };
+  premium: number;
+  issueDate: string;
+  expiryDate: string;
+}
+
 export interface ApiReceipt {
   id: string;
   receiptNumber: string;
@@ -122,6 +170,10 @@ export interface ApiReceipt {
     id: string;
     policyNumber: string;
     policyName: string;
+    insuranceType: InsuranceType;
+    premium: number;
+    issueDate: string;
+    expiryDate: string;
     customer: { id: string; customerCode: string; fullName: string };
     agent: AgentRef;
   };
@@ -180,4 +232,48 @@ export interface PolicyPerformanceRow {
   catalogPremium: number;
   policiesSold: number;
   totalPremium: number;
+}
+
+// ─── Agent workspace ──────────────────────────────────────────────────────────
+export type AgentDashboardRange = "7D" | "30D" | "6M" | "1Y";
+
+export interface AgentDashboard {
+  summary: {
+    customers: number;
+    policiesSold: number;
+    activePolicies: number;
+    totalPremium: number;
+    premiumCollected: number;
+    pendingPayments: number;
+    expiringSoon: number;
+  };
+  salesTrend: SalesSeries;
+  policyDistribution: PolicyDistributionRow[];
+  premiumTrend: { period: string; written: number; collected: number }[];
+  recentSales: ApiSoldPolicy[];
+  recentCustomers: {
+    id: string;
+    customerCode: string;
+    fullName: string;
+    phone: string;
+    status: CustomerStatus;
+    policiesCount: number;
+    lastPolicy: {
+      policyNumber: string;
+      policyName: string;
+      insuranceType: InsuranceType;
+      issueDate: string;
+    } | null;
+    createdAt: string;
+  }[];
+  expiringPolicies: (ApiSoldPolicy & { daysRemaining: number })[];
+  expiringWindowDays: number;
+  generatedAt: string;
+}
+
+export interface AgentProfile extends ApiAgent {
+  stats: { customers: number; policiesSold: number };
+  lastLoginAt: string | null;
+  passwordChangedAt: string | null;
+  mustChangePassword: boolean;
 }

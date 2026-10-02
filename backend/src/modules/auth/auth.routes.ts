@@ -7,25 +7,29 @@ import { agentSchema, toAgentDto } from "../agents/agents.schemas.js";
 import { recordAudit } from "../audit-logs/audit-logs.service.js";
 import { getCurrentUser } from "./auth.service.js";
 
-const meSchema = z
+export const meSchema = z
   .object({
     id: z.uuid(),
     email: z.string(),
     role: z.enum(Role),
     status: z.enum(UserStatus),
     lastLoginAt: z.iso.datetime().nullable(),
+    mustChangePassword: z
+      .boolean()
+      .describe("Agent signed in with a temporary password and must change it first"),
     agent: agentSchema.nullable(),
   })
   .meta({ id: "CurrentUser" });
 
 type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;
 
-const toMeDto = (user: CurrentUser): z.infer<typeof meSchema> => ({
+export const toMeDto = (user: CurrentUser): z.infer<typeof meSchema> => ({
   id: user.id,
   email: user.email,
   role: user.role,
   status: user.status,
   lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+  mustChangePassword: user.mustChangePassword,
   agent: user.agent ? toAgentDto(user.agent) : null,
 });
 
@@ -63,6 +67,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
     "/me",
     {
+      config: { allowPendingPasswordChange: true },
       schema: {
         tags: ["Auth"],
         summary: "Current user, role and agent profile",

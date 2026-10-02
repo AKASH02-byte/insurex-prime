@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
 import type { Database } from "../src/config/database.js";
+import { computeExpiryDate } from "../src/modules/sold-policies/sold-policies.service.js";
 import {
   bearer,
   createTestApp,
@@ -15,6 +16,20 @@ const AGENT_A_EMAIL = "agent.a@test.example.com";
 const AGENT_B_EMAIL = "agent.b@test.example.com";
 const AGENT_A = bearer(tokenFor("uid-agent-a", AGENT_A_EMAIL));
 const AGENT_B = bearer(tokenFor("uid-agent-b", AGENT_B_EMAIL));
+const FRONTEND = { origin: "http://localhost:8080" };
+const NEW_PASSWORD = "Fresh-Start-2026";
+const today = () => new Date().toISOString().slice(0, 10);
+const shiftDays = (days: number) =>
+  new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+
+/** The session cookie from a Set-Cookie header, ready to send back. */
+function sessionCookieFrom(setCookie: string | string[] | undefined) {
+  const header = [setCookie ?? []]
+    .flat()
+    .find((value) => value.startsWith("insurex_agent_session="));
+  if (!header) throw new Error("no session cookie set");
+  return { cookie: header.split(";")[0]! };
+}
 
 const healthPolicy = {
   policyCode: "TST-HLT-1",
@@ -41,6 +56,10 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
   // Shared fixtures created in beforeEach.
   let agentAId: string;
   let agentBId: string;
+  let agentACode: string;
+  let agentBCode: string;
+  let agentATempPassword: string;
+  let agentBTempPassword: string;
   let activePolicyId: string;
   let inactivePolicyId: string;
 
@@ -77,6 +96,8 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
     });
     expect(agentA.status).toBe(201);
     agentAId = agentA.body.data.id;
+    agentACode = agentA.body.data.agentCode;
+    agentATempPassword = agentA.body.data.temporaryPassword;
 
     const agentB = await call("POST", "/agents", ADMIN, {
       fullName: "Agent B",
@@ -84,6 +105,8 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       phone: "+91 90000 00002",
     });
     agentBId = agentB.body.data.id;
+    agentBCode = agentB.body.data.agentCode;
+    agentBTempPassword = agentB.body.data.temporaryPassword;
 
     const active = await call("POST", "/policies", ADMIN, healthPolicy);
     expect(active.status).toBe(201);
@@ -190,6 +213,525 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
     expect(body.error.code).toBe("ACCOUNT_DISABLED");
   });
 
+  // ─── Agent password sign-in & sessions ──────────────────────────────────────
+  describe("agent password sign-in", () => {
+    const login = (identifier: string, password: string, headers: Record<string, string> = {}) =>
+      call("POST", "/auth/agent/login", { ...FRONTEND, ...headers }, { identifier, password });
+
+    /** Signs in with the temporary password and replaces it, as a new agent would. */
+    async function activeSession(identifier: string, temporaryPassword: string) {
+      const first = await login(identifier, temporaryPassword);
+      expect(first.status).toBe(200);
+      const changed = await call(
+        "POST",
+        "/auth/agent/change-password",
+        { ...sessionCookieFrom(first.headers["set-cookie"]), ...FRONTEND },
+        { currentPassword: temporaryPassword, newPassword: NEW_PASSWORD },
+      );
+      expect(changed.status).toBe(200);
+      return { ...sessionCookieFrom(changed.headers["set-cookie"]), ...FRONTEND };
+    }
+
+    it("1. signs in by agent code or email and sets a secure HttpOnly session cookie", async () => {
+      expect(agentATempPassword).toMatch(/^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/);
+      for (const identifier of [
+        agentACode,
+        agentACode.toLowerCase(),
+        AGENT_A_EMAIL.toUpperCase(),
+      ]) {
+        const { status, body, headers } = await login(identifier, agentATempPassword);
+        expect(status, identifier).toBe(200);
+        expect(body.data.user).toMatchObject({
+          role: "AGENT",
+          mustChangePassword: true,
+          agent: { id: agentAId, agentCode: agentACode },
+        });
+        expect(JSON.stringify(body)).not.toMatch(/passwordHash|scrypt|token/i);
+        const setCookie = String(headers["set-cookie"]);
+        expect(setCookie).toMatch(/insurex_agent_session=[A-Za-z0-9_-]{43};/);
+        expect(setCookie).toMatch(/HttpOnly/);
+        expect(setCookie).toMatch(/SameSite=Lax/);
+        expect(setCookie).toMatch(/Max-Age=43200/);
+
+        const me = await call("GET", "/auth/me", sessionCookieFrom(headers["set-cookie"]));
+        expect(me.status).toBe(200);
+        expect(me.body.data.agent.id).toBe(agentAId);
+      }
+      // Only a hash of the token is stored.
+      const sessions = await db.agentSession.findMany();
+      expect(sessions).toHaveLength(3);
+      expect(sessions.every((session) => /^[a-f0-9]{64}$/.test(session.tokenHash))).toBe(true);
+      const user = await db.user.findUniqueOrThrow({ where: { email: AGENT_A_EMAIL } });
+      expect(user.lastLoginAt).not.toBeNull();
+      expect(user.passwordHash).toMatch(/^scrypt\$/);
+    });
+
+    it("2. rejects wrong passwords and unknown accounts with the same 401", async () => {
+      const wrong = await login(agentACode, "Wrong-Password-1");
+      expect(wrong.status).toBe(401);
+      expect(wrong.body.error.code).toBe("INVALID_CREDENTIALS");
+      expect(wrong.headers["set-cookie"]).toBeUndefined();
+
+      const unknown = await login("AGT-NOPE", agentATempPassword);
+      expect(unknown.status).toBe(401);
+      expect(unknown.body.error.message).toBe(wrong.body.error.message);
+      expect((await login("nobody@example.com", agentATempPassword)).status).toBe(401);
+      // Super Admins cannot use password sign-in.
+      await call("POST", "/auth/verify", ADMIN);
+      expect((await login(SUPER_ADMIN_EMAIL, agentATempPassword)).status).toBe(401);
+      // Another agent's password does not work.
+      expect((await login(agentACode, agentBTempPassword)).status).toBe(401);
+      expect((await login("", "x")).status).toBe(400);
+    });
+
+    it("3. blocks suspended and inactive agents and ends their sessions", async () => {
+      const cookie = await activeSession(agentACode, agentATempPassword);
+      expect((await call("GET", "/customers", cookie)).status).toBe(200);
+
+      await call("PATCH", `/agents/${agentAId}/status`, ADMIN, { status: "SUSPENDED" });
+      const blocked = await login(agentACode, NEW_PASSWORD);
+      expect(blocked.status).toBe(403);
+      expect(blocked.body.error.code).toBe("ACCOUNT_DISABLED");
+      expect(blocked.headers["set-cookie"]).toBeUndefined();
+      // A wrong password still gets the generic 401, so status is not leaked.
+      expect((await login(agentACode, "Wrong-Password-1")).status).toBe(401);
+      // The existing session was revoked.
+      expect((await call("GET", "/customers", cookie)).status).toBe(401);
+
+      await call("PATCH", `/agents/${agentAId}/status`, ADMIN, { status: "INACTIVE" });
+      expect((await login(agentACode, NEW_PASSWORD)).status).toBe(403);
+      await call("PATCH", `/agents/${agentAId}/status`, ADMIN, { status: "ACTIVE" });
+      expect((await login(agentACode, NEW_PASSWORD)).status).toBe(200);
+    });
+
+    it("4. forces a password change before anything else", async () => {
+      const first = await login(agentACode, agentATempPassword);
+      const temp = { ...sessionCookieFrom(first.headers["set-cookie"]), ...FRONTEND };
+
+      for (const [method, url] of [
+        ["GET", "/customers"],
+        ["GET", "/agent/dashboard"],
+        ["GET", "/policies"],
+        ["POST", "/customers"],
+      ] as const) {
+        const blocked = await call(method, url, temp, method === "POST" ? {} : undefined);
+        expect(blocked.status, url).toBe(403);
+        expect(blocked.body.error.code).toBe("PASSWORD_CHANGE_REQUIRED");
+      }
+      expect((await call("GET", "/auth/me", temp)).body.data.mustChangePassword).toBe(true);
+
+      const change = (currentPassword: string, newPassword: string) =>
+        call("POST", "/auth/agent/change-password", temp, { currentPassword, newPassword });
+      expect((await change("Wrong-Password-1", NEW_PASSWORD)).status).toBe(401);
+      expect((await change(agentATempPassword, "short")).status).toBe(400);
+      expect((await change(agentATempPassword, "nodigitshere")).status).toBe(400);
+      expect((await change(agentATempPassword, agentATempPassword)).status).toBe(400);
+
+      const changed = await change(agentATempPassword, NEW_PASSWORD);
+      expect(changed.status).toBe(200);
+      expect(changed.body.data.mustChangePassword).toBe(false);
+      const fresh = { ...sessionCookieFrom(changed.headers["set-cookie"]), ...FRONTEND };
+
+      // The session that used the temporary password is rotated out.
+      expect((await call("GET", "/auth/me", temp)).status).toBe(401);
+      expect((await call("GET", "/customers", fresh)).status).toBe(200);
+      expect((await login(agentACode, agentATempPassword)).status).toBe(401);
+      expect((await login(AGENT_A_EMAIL, NEW_PASSWORD)).status).toBe(200);
+
+      // A Super Admin reset issues a new temporary password and signs the agent out.
+      const reset = await call("POST", `/agents/${agentAId}/reset-password`, ADMIN);
+      expect(reset.status).toBe(200);
+      expect((await call("GET", "/customers", fresh)).status).toBe(401);
+      expect((await login(agentACode, NEW_PASSWORD)).status).toBe(401);
+      const again = await login(agentACode, reset.body.data.temporaryPassword);
+      expect(again.body.data.user.mustChangePassword).toBe(true);
+      expect((await call("POST", `/agents/${agentBId}/reset-password`, AGENT_A)).status).toBe(403);
+    });
+
+    it("5. returns dashboard figures for the signed-in agent only", async () => {
+      const a = await activeSession(agentACode, agentATempPassword);
+      const b = await activeSession(agentBCode, agentBTempPassword);
+
+      const empty = await call("GET", "/agent/dashboard", a);
+      expect(empty.status).toBe(200);
+      expect(empty.body.data.summary).toEqual({
+        customers: 0,
+        policiesSold: 0,
+        activePolicies: 0,
+        totalPremium: 0,
+        premiumCollected: 0,
+        pendingPayments: 0,
+        expiringSoon: 0,
+      });
+
+      const mine = await call("POST", "/customers", a, { fullName: "Mine", phone: "9111111111" });
+      const theirs = await call("POST", "/customers", b, {
+        fullName: "Theirs",
+        phone: "9222222222",
+      });
+      // Paid at sale, issued today.
+      await call("POST", "/sold-policies", a, {
+        policyId: activePolicyId,
+        customerId: mine.body.data.id,
+        paymentMethod: "UPI",
+      });
+      // Unpaid, issued 30 days ago → a 12-month policy is not expiring yet.
+      await call("POST", "/sold-policies", a, {
+        policyId: activePolicyId,
+        customerId: mine.body.data.id,
+        issueDate: shiftDays(-30),
+      });
+      // An ACTIVE policy that expires in about 10 days (admin backdates).
+      await call("POST", "/sold-policies", ADMIN, {
+        policyId: activePolicyId,
+        customerId: mine.body.data.id,
+        issueDate: shiftDays(-355),
+        paymentMethod: "CASH",
+      });
+      await call("POST", "/sold-policies", b, {
+        policyId: activePolicyId,
+        customerId: theirs.body.data.id,
+        paymentMethod: "CARD",
+      });
+
+      // Query parameters cannot select another agent.
+      const dashboard = await call("GET", `/agent/dashboard?range=7D&agentId=${agentBId}`, a);
+      expect(dashboard.status).toBe(200);
+      const data = dashboard.body.data;
+      expect(data.summary).toEqual({
+        customers: 1,
+        policiesSold: 3,
+        activePolicies: 2,
+        totalPremium: 30000,
+        premiumCollected: 20000,
+        pendingPayments: 1,
+        expiringSoon: 1,
+      });
+      expect(data.salesTrend.interval).toBe("day");
+      expect(data.salesTrend.points).toHaveLength(7);
+      expect(data.salesTrend.points.at(-1)).toMatchObject({ period: today(), policiesSold: 1 });
+      expect(data.policyDistribution[0]).toMatchObject({
+        insuranceType: "HEALTH",
+        policiesSold: 3,
+      });
+      expect(data.premiumTrend).toHaveLength(12);
+      expect(data.premiumTrend.at(-1).collected).toBeGreaterThanOrEqual(10000);
+      expect(data.recentSales).toHaveLength(3);
+      expect(
+        data.recentSales.every((sale: { agent: { id: string } }) => sale.agent.id === agentAId),
+      ).toBe(true);
+      expect(data.recentCustomers).toEqual([
+        expect.objectContaining({ fullName: "Mine", policiesCount: 3 }),
+      ]);
+      expect(data.expiringPolicies).toHaveLength(1);
+      const expiry = computeExpiryDate(new Date(`${shiftDays(-355)}T00:00:00Z`), 12);
+      expect(data.expiringPolicies[0]).toMatchObject({
+        policyStatus: "ACTIVE",
+        expiryDate: expiry.toISOString().slice(0, 10),
+        daysRemaining: Math.round(
+          (expiry.getTime() - Date.parse(`${today()}T00:00:00Z`)) / 86_400_000,
+        ),
+      });
+
+      for (const range of ["30D", "6M", "1Y"]) {
+        const ranged = await call("GET", `/agent/dashboard?range=${range}`, a);
+        expect(ranged.status, range).toBe(200);
+      }
+      expect((await call("GET", "/agent/dashboard?range=5Y", a)).status).toBe(400);
+      expect((await call("GET", "/agent/dashboard", b)).body.data.summary.policiesSold).toBe(1);
+      // Super Admins use the platform dashboard instead.
+      expect((await call("GET", "/agent/dashboard", ADMIN)).status).toBe(403);
+      expect((await call("GET", "/agent/dashboard")).status).toBe(401);
+    });
+
+    it("6–8. lets an agent create and edit only their own customers", async () => {
+      const a = await activeSession(agentACode, agentATempPassword);
+      const b = await activeSession(agentBCode, agentBTempPassword);
+
+      const created = await call("POST", "/customers", a, {
+        fullName: "Asha Rao",
+        phone: "+91 91234 56789",
+        email: "asha@example.com",
+        assignedAgentId: agentBId,
+      });
+      expect(created.status).toBe(201);
+      expect(created.body.data.assignedAgent.id).toBe(agentAId);
+      const customerId = created.body.data.id;
+
+      const edited = await call("PATCH", `/customers/${customerId}`, a, {
+        city: "Pune",
+        assignedAgentId: agentBId,
+      });
+      expect(edited.status).toBe(200);
+      expect(edited.body.data).toMatchObject({ city: "Pune", assignedAgent: { id: agentAId } });
+
+      // Agent B can neither see, edit nor delete it.
+      expect((await call("GET", `/customers/${customerId}`, b)).status).toBe(404);
+      expect(
+        (await call("PATCH", `/customers/${customerId}`, b, { fullName: "Hijacked" })).status,
+      ).toBe(404);
+      expect((await call("DELETE", `/customers/${customerId}`, b)).status).toBe(404);
+      expect((await call("GET", "/customers?search=asha", b)).body.meta.total).toBe(0);
+      expect((await call("GET", `/customers?agentId=${agentAId}`, b)).body.meta.total).toBe(0);
+
+      expect((await call("GET", "/customers?search=asha", a)).body.meta.total).toBe(1);
+      expect((await call("DELETE", `/customers/${customerId}`, a)).status).toBe(200);
+    });
+
+    it("9–10. shows ACTIVE policies read-only", async () => {
+      const a = await activeSession(agentACode, agentATempPassword);
+      const list = await call("GET", "/policies?status=INACTIVE", a);
+      expect(list.body.data.map((policy: { id: string }) => policy.id)).toEqual([activePolicyId]);
+      expect((await call("GET", `/policies/${activePolicyId}`, a)).status).toBe(200);
+      expect((await call("GET", `/policies/${inactivePolicyId}`, a)).status).toBe(404);
+
+      expect((await call("POST", "/policies", a, healthPolicy)).status).toBe(403);
+      expect((await call("PATCH", `/policies/${activePolicyId}`, a, { premium: 1 })).status).toBe(
+        403,
+      );
+      expect(
+        (await call("PATCH", `/policies/${activePolicyId}/status`, a, { status: "INACTIVE" }))
+          .status,
+      ).toBe(403);
+      expect((await call("DELETE", `/policies/${activePolicyId}`, a)).status).toBe(403);
+      const policy = await db.policy.findUniqueOrThrow({ where: { id: activePolicyId } });
+      expect(policy).toMatchObject({ status: "ACTIVE" });
+      expect(policy.premium.toNumber()).toBe(10000);
+    });
+
+    it("11–12. sells to own customers with server-side premium, expiry, number and receipt", async () => {
+      const a = await activeSession(agentACode, agentATempPassword);
+      const b = await activeSession(agentBCode, agentBTempPassword);
+      const mine = await call("POST", "/customers", a, { fullName: "Mine", phone: "9333333333" });
+      const theirs = await call("POST", "/customers", b, {
+        fullName: "Theirs",
+        phone: "9444444444",
+      });
+      const issueDate = shiftDays(-3);
+      const expectedExpiry = computeExpiryDate(new Date(`${issueDate}T00:00:00Z`), 12)
+        .toISOString()
+        .slice(0, 10);
+
+      const quote = await call(
+        "GET",
+        `/sold-policies/quote?policyId=${activePolicyId}&customerId=${mine.body.data.id}&issueDate=${issueDate}`,
+        a,
+      );
+      expect(quote.status).toBe(200);
+      expect(quote.body.data).toMatchObject({
+        premium: 10000,
+        issueDate,
+        expiryDate: expectedExpiry,
+        policy: { durationMonths: 12, coverageAmount: 500000 },
+      });
+
+      const sale = await call("POST", "/sold-policies", a, {
+        policyId: activePolicyId,
+        customerId: mine.body.data.id,
+        issueDate,
+        paymentMethod: "UPI",
+        agentId: agentBId,
+      });
+      expect(sale.status).toBe(201);
+      expect(sale.body.data).toMatchObject({
+        premium: 10000,
+        amountPaid: 10000,
+        issueDate,
+        expiryDate: expectedExpiry,
+        paymentStatus: "PAID",
+        policyStatus: "ACTIVE",
+        agent: { id: agentAId },
+      });
+      expect(sale.body.data.policyNumber).toMatch(/^POL-\d{4}-[A-Z2-9]{8}$/);
+      expect(sale.body.data.receipts).toHaveLength(1);
+      expect(sale.body.data.receipts[0]).toMatchObject({
+        amount: 10000,
+        paymentMethod: "UPI",
+        paymentStatus: "PAID",
+      });
+      expect(sale.body.data.receipts[0].receiptNumber).toMatch(/^RCP-\d{4}-[A-Z2-9]{8}$/);
+
+      // Not trusted from the client: premium, another agent's customer, inactive policy, dates.
+      const sell = (body: Record<string, unknown>) =>
+        call("POST", "/sold-policies", a, {
+          policyId: activePolicyId,
+          customerId: mine.body.data.id,
+          ...body,
+        });
+      expect((await sell({ premium: 1 })).status).toBe(403);
+      // Offline sales record their payment state without a receipt.
+      for (const [paymentStatus, policyStatus] of [
+        ["DUE", "PENDING"],
+        ["PENDING", "PENDING"],
+        ["PAID", "ACTIVE"],
+      ] as const) {
+        const logged = await sell({ paymentStatus });
+        expect(logged.status).toBe(201);
+        expect(logged.body.data).toMatchObject({ paymentStatus, policyStatus });
+        expect(logged.body.data.receipts).toHaveLength(0);
+      }
+      expect((await sell({ customerId: theirs.body.data.id })).status).toBe(404);
+      expect(
+        (
+          await call(
+            "GET",
+            `/sold-policies/quote?policyId=${activePolicyId}&customerId=${theirs.body.data.id}`,
+            a,
+          )
+        ).status,
+      ).toBe(404);
+      expect((await sell({ policyId: inactivePolicyId })).status).toBe(404);
+      expect((await sell({ issueDate: shiftDays(-45) })).status).toBe(400);
+      expect((await sell({ issueDate: shiftDays(120) })).status).toBe(400);
+      expect((await sell({ issueDate: "2026-02-30" })).status).toBe(400);
+      expect(
+        (await sell({ policyStatus: "ACTIVE", paymentStatus: "PAID" })).body.data,
+      ).toMatchObject({ policyStatus: "PENDING", paymentStatus: "PENDING" });
+      await call("PATCH", `/customers/${mine.body.data.id}`, a, { status: "INACTIVE" });
+      expect((await sell({})).status).toBe(409);
+      expect(await db.soldPolicy.count({ where: { customerId: theirs.body.data.id } })).toBe(0);
+    });
+
+    it("13–14. lists only the agent's own sold policies and receipts", async () => {
+      const a = await activeSession(agentACode, agentATempPassword);
+      const b = await activeSession(agentBCode, agentBTempPassword);
+      const mine = await call("POST", "/customers", a, { fullName: "Mine", phone: "9555555555" });
+      const theirs = await call("POST", "/customers", b, {
+        fullName: "Theirs",
+        phone: "9666666666",
+      });
+      const sale = await call("POST", "/sold-policies", a, {
+        policyId: activePolicyId,
+        customerId: mine.body.data.id,
+        paymentMethod: "CASH",
+      });
+      const other = await call("POST", "/sold-policies", b, {
+        policyId: activePolicyId,
+        customerId: theirs.body.data.id,
+        paymentMethod: "CARD",
+      });
+
+      const sold = await call("GET", `/sold-policies?agentId=${agentBId}`, a);
+      expect(sold.body.meta.total).toBe(1);
+      expect(sold.body.data[0].id).toBe(sale.body.data.id);
+      expect((await call("GET", `/sold-policies/${other.body.data.id}`, a)).status).toBe(404);
+      expect((await call("GET", "/sold-policies?insuranceType=MOTOR", a)).body.meta.total).toBe(0);
+      expect(
+        (await call("GET", `/sold-policies?from=${today()}&to=${today()}&policyStatus=ACTIVE`, a))
+          .body.meta.total,
+      ).toBe(1);
+
+      const receipts = await call("GET", `/receipts?agentId=${agentBId}`, a);
+      expect(receipts.body.meta.total).toBe(1);
+      expect(receipts.body.data[0].soldPolicy).toMatchObject({
+        policyNumber: sale.body.data.policyNumber,
+        insuranceType: "HEALTH",
+        premium: 10000,
+        expiryDate: sale.body.data.expiryDate,
+      });
+      const otherReceiptId = other.body.data.receipts[0].id;
+      expect((await call("GET", `/receipts/${otherReceiptId}`, a)).status).toBe(404);
+      expect((await call("GET", `/receipts/${otherReceiptId}`, b)).status).toBe(200);
+      expect((await call("GET", "/receipts", ADMIN)).body.meta.total).toBe(2);
+    });
+
+    it("15. logout revokes the session server-side", async () => {
+      const a = await activeSession(agentACode, agentATempPassword);
+      expect((await call("GET", "/auth/me", a)).status).toBe(200);
+
+      const out = await call("POST", "/auth/agent/logout", a);
+      expect(out.status).toBe(200);
+      expect(String(out.headers["set-cookie"])).toMatch(/insurex_agent_session=; .*Max-Age=0/);
+      const replay = await call("GET", "/auth/me", a);
+      expect(replay.status).toBe(401);
+      expect(replay.body.error.code).toBe("INVALID_TOKEN");
+      // Logging out twice, or without a session, is harmless.
+      expect((await call("POST", "/auth/agent/logout", a)).status).toBe(200);
+      expect((await call("POST", "/auth/agent/logout", FRONTEND)).status).toBe(200);
+    });
+
+    it("16. keeps Super Admin Google sign-in working alongside agent cookies", async () => {
+      const admin = await call("POST", "/auth/verify", ADMIN);
+      expect(admin.status).toBe(200);
+      expect(admin.body.data).toMatchObject({ role: "SUPER_ADMIN", mustChangePassword: false });
+
+      const a = await activeSession(agentACode, agentATempPassword);
+      await call("POST", "/customers", a, { fullName: "Mine", phone: "9777777777" });
+      // A bearer token takes precedence over any cookie in the same browser.
+      const both = await call("GET", "/customers", { ...a, ...ADMIN });
+      expect(both.status).toBe(200);
+      expect((await call("GET", "/auth/me", { ...a, ...ADMIN })).body.data.role).toBe(
+        "SUPER_ADMIN",
+      );
+      expect((await call("GET", "/agents", ADMIN)).body.meta.total).toBe(2);
+      expect((await call("GET", "/agents", a)).status).toBe(403);
+      expect((await call("GET", "/dashboard/summary", ADMIN)).body.data.totalCustomers).toBe(1);
+    });
+
+    it("rejects cookie-authenticated writes from untrusted origins", async () => {
+      const a = await activeSession(agentACode, agentATempPassword);
+      const evil = { cookie: a.cookie, origin: "https://evil.example.com" };
+      const blocked = await call("POST", "/customers", evil, {
+        fullName: "X",
+        phone: "9888888888",
+      });
+      expect(blocked.status).toBe(403);
+      expect(
+        (await login(agentACode, NEW_PASSWORD, { origin: "https://evil.example.com" })).status,
+      ).toBe(403);
+      // Reads are not state-changing and stay available.
+      expect((await call("GET", "/customers", evil)).status).toBe(200);
+    });
+
+    it("lets agents edit only safe profile fields", async () => {
+      const a = await activeSession(agentACode, agentATempPassword);
+      const profile = await call("GET", "/agent/profile", a);
+      expect(profile.status).toBe(200);
+      expect(profile.body.data).toMatchObject({
+        id: agentAId,
+        agentCode: agentACode,
+        email: AGENT_A_EMAIL,
+        status: "ACTIVE",
+        mustChangePassword: false,
+      });
+      expect(profile.body.data.lastLoginAt).not.toBeNull();
+
+      const updated = await call("PATCH", "/agent/profile", a, {
+        fullName: "Agent A Renamed",
+        phone: "+91 90000 99999",
+        address: "12 MG Road, Pune",
+      });
+      expect(updated.status).toBe(200);
+      expect(updated.body.data).toMatchObject({
+        fullName: "Agent A Renamed",
+        address: "12 MG Road, Pune",
+      });
+      for (const body of [
+        { email: "x@example.com" },
+        { agentCode: "HACK-1" },
+        { status: "ACTIVE" },
+      ]) {
+        expect((await call("PATCH", "/agent/profile", a, body)).status).toBe(400);
+      }
+      const agent = await db.agent.findUniqueOrThrow({
+        where: { id: agentAId },
+        include: { user: true },
+      });
+      expect(agent.agentCode).toBe(agentACode);
+      expect(agent.user.email).toBe(AGENT_A_EMAIL);
+      expect((await call("GET", "/agent/profile", ADMIN)).status).toBe(403);
+    });
+
+    it("locks out repeated failures", async () => {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        expect((await login("AGT-LOCK", "Wrong-Password-1")).status).toBe(401);
+      }
+      const locked = await login("AGT-LOCK", "Wrong-Password-1");
+      expect(locked.status).toBe(429);
+      expect(locked.body.error.code).toBe("RATE_LIMITED");
+    });
+  });
+
   // ─── Role-based access ──────────────────────────────────────────────────────
   it("keeps admin-only endpoints away from agents", async () => {
     expect((await call("GET", "/agents", AGENT_A)).status).toBe(403);
@@ -248,16 +790,19 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       phone: "+91 94444 44444",
     });
 
+    const issueDate = shiftDays(-10);
     const sale = await call("POST", "/sold-policies", AGENT_A, {
       policyId: activePolicyId,
       customerId: mine.body.data.id,
-      issueDate: "2026-01-01",
+      issueDate,
       agentId: agentBId,
     });
     expect(sale.status).toBe(201);
     expect(sale.body.data).toMatchObject({
       premium: 10000,
-      expiryDate: "2026-12-31",
+      expiryDate: computeExpiryDate(new Date(`${issueDate}T00:00:00Z`), 12)
+        .toISOString()
+        .slice(0, 10),
       policyStatus: "PENDING",
       paymentStatus: "PENDING",
     });
@@ -398,21 +943,19 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       fullName: "B1",
       phone: "+91 98888 88888",
     });
-    await call("POST", "/sold-policies", AGENT_A, {
-      policyId: activePolicyId,
-      customerId: a.body.data.id,
-      issueDate: "2026-03-10",
-    });
-    await call("POST", "/sold-policies", AGENT_A, {
-      policyId: activePolicyId,
-      customerId: a.body.data.id,
-      issueDate: "2026-04-10",
-    });
-    await call("POST", "/sold-policies", AGENT_B, {
-      policyId: activePolicyId,
-      customerId: b.body.data.id,
-      issueDate: "2026-04-15",
-    });
+    // Backdated sales are recorded by the admin; they are attributed to each customer's agent.
+    for (const [customerId, issueDate] of [
+      [a.body.data.id, "2026-03-10"],
+      [a.body.data.id, "2026-04-10"],
+      [b.body.data.id, "2026-04-15"],
+    ]) {
+      const sale = await call("POST", "/sold-policies", ADMIN, {
+        policyId: activePolicyId,
+        customerId,
+        issueDate,
+      });
+      expect(sale.status).toBe(201);
+    }
 
     const admin = await call("GET", "/dashboard/summary", ADMIN);
     expect(admin.body.data).toMatchObject({
@@ -479,5 +1022,6 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
     const all = await db.auditLog.findMany();
     expect(all.some((log) => log.action === "auth.login")).toBe(true);
     expect(JSON.stringify(all)).not.toContain("valid|");
+    expect(JSON.stringify(all)).not.toContain(agentATempPassword);
   });
 });
