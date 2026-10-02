@@ -34,6 +34,17 @@ export const agentWithStatsSchema = agentSchema
   })
   .meta({ id: "AgentWithStats" });
 
+export const agentListItemSchema = agentWithStatsSchema
+  .extend({
+    initialPassword: z
+      .string()
+      .nullable()
+      .describe(
+        "SUPER_ADMIN only. The default password (first 5 letters of first name + @ + phone) while the agent has not yet changed it; null once they have. Passwords are stored hashed, so a password the agent chose is never retrievable",
+      ),
+  })
+  .meta({ id: "AgentListItem" });
+
 export const agentCreatedSchema = agentWithStatsSchema
   .extend({
     temporaryPassword: z

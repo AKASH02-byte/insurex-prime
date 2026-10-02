@@ -1,5 +1,3 @@
-import { getFirebaseAuth, isFirebaseClientConfigured } from "@/lib/firebase";
-
 /**
  * Base URL of the InsureX backend (e.g. https://api.example.com). When unset, the
  * admin pages keep using their built-in demo data and the agent workspace is disabled.
@@ -51,20 +49,6 @@ export const toQuery = (params: object | undefined): Query => ({
   ...(params as Query | undefined),
 });
 
-/** Agent pages authenticate with the HttpOnly session cookie only. */
-const isAgentArea = () => window.location.pathname.startsWith("/agent");
-
-/**
- * Firebase ID token for Super Admin pages (refreshed by Firebase when needed), or null
- * when the request should rely on the agent session cookie instead.
- */
-async function getBearerToken(): Promise<string | null> {
-  if (isAgentArea() || !isFirebaseClientConfigured) return null;
-  const auth = getFirebaseAuth();
-  await auth.authStateReady();
-  return auth.currentUser ? auth.currentUser.getIdToken() : null;
-}
-
 function buildUrl(path: string, query?: Query) {
   const url = new URL(`${API_BASE_URL}${path}`);
   for (const [key, value] of Object.entries(query ?? {})) {
@@ -79,8 +63,10 @@ interface RequestOptions {
   query?: Query;
   body?: unknown;
   signal?: AbortSignal;
-  /** false for public endpoints such as agent sign-in. */
+  /** Kept for call-site clarity: sign-in endpoints are public. Sessions use the cookie. */
   auth?: boolean;
+  /** Non-2xx statuses whose JSON `data` is still a valid result (e.g. /health answers 503 when degraded). */
+  acceptStatuses?: number[];
 }
 
 async function send(path: string, options: RequestOptions) {
@@ -90,15 +76,13 @@ async function send(path: string, options: RequestOptions) {
   if (typeof window === "undefined") {
     throw new ApiError(0, "BROWSER_ONLY", "API requests are only made from the browser.");
   }
-  const token = options.auth === false ? null : await getBearerToken();
   let response: Response;
   try {
     response = await fetch(buildUrl(path, options.query), {
       method: options.method ?? "GET",
-      // Sends and stores the agent session cookie (HttpOnly; never readable here).
+      // Sends and stores the session cookie (agents and Super Admin) (HttpOnly; never readable here).
       credentials: "include",
       headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
       },
       ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
@@ -116,7 +100,9 @@ async function send(path: string, options: RequestOptions) {
     error?: { code?: string; message?: string; requestId?: string };
   } | null;
 
-  if (!response.ok || !payload?.success) {
+  const accepted =
+    options.acceptStatuses?.includes(response.status) === true && payload?.data !== undefined;
+  if (!accepted && (!response.ok || !payload?.success)) {
     throw new ApiError(
       response.status,
       payload?.error?.code ?? "UNKNOWN_ERROR",

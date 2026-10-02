@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
-  Chrome,
   Eye,
   EyeOff,
   KeyRound,
@@ -33,12 +32,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { AgentLoginForm } from "@/components/auth/AgentLoginForm";
-import { signInWithPopup } from "firebase/auth";
-import { exchangeFirebaseIdentity, getAdminSession } from "@/lib/admin-auth";
+import { adminPasswordLogin, getAdminSession } from "@/lib/admin-auth";
 import { forgetAgentSignIn, hasAgentSignInHint } from "@/lib/agent-session";
-import { agentAuthApi, authApi, isApiConfigured } from "@/lib/api";
-import { signOutFromGoogle } from "@/lib/firebase-client";
-import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
+import { adminAuthApi, agentAuthApi, isApiConfigured } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: async () => {
@@ -73,8 +69,8 @@ function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState("");
 
   // Form errors
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
@@ -101,7 +97,7 @@ function LoginPage() {
       const trimmed = identifier.trim();
       if (!trimmed) {
         newErrors.identifier = isSuperAdmin
-          ? "Please enter your Admin ID or registered email."
+          ? "Please enter your Admin ID, phone or email."
           : "Please enter your Agent ID or registered email.";
       } else if (trimmed.includes("@")) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -138,46 +134,28 @@ function LoginPage() {
     setTouched({});
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    toast.error("Password sign-in is not connected. Use your authorized Google account.");
-  };
+    setTouched({ identifier: true, password: true });
+    if (!validate()) return;
 
-  const handleGoogleSignIn = async () => {
-    if (!isSuperAdmin) {
-      toast.error("Google sign-in is currently available for Super Admin accounts only.");
-      return;
-    }
-
-    setGoogleError("");
-    setIsGoogleLoading(true);
+    setSignInError("");
+    setIsSigningIn(true);
     try {
-      const result = await signInWithPopup(getFirebaseAuth(), googleProvider);
-      const email = result.user.email;
-      console.log(email);
-      const idToken = await result.user.getIdToken();
-      await exchangeFirebaseIdentity({ data: { idToken } });
-      // One signed-in identity per browser: end any agent session.
+      const credentials = { identifier: identifier.trim(), password };
+      // Opens the admin pages' session, then the API session used for live data.
+      await adminPasswordLogin({ data: credentials });
+      // One signed-in identity per browser: this replaces any agent session.
       forgetAgentSignIn();
-      if (isApiConfigured) await agentAuthApi.logout().catch(() => undefined);
-      if (isApiConfigured) {
-        // Best effort: register the sign-in with the backend API. Login itself must
-        // not depend on it, so failures are reported but do not block navigation.
-        await authApi.verify().catch((error: unknown) => {
-          toast.warning("Signed in, but the InsureX API could not verify this account.", {
-            description: error instanceof Error ? error.message : undefined,
-          });
-        });
-      }
-      toast.success(`Signed in as ${email}.`);
+      if (isApiConfigured) await adminAuthApi.login(credentials.identifier, credentials.password);
+      toast.success("Signed in as Super Admin.");
       await navigate({ to: "/admin/dashboard" });
     } catch (error) {
-      await signOutFromGoogle().catch(() => undefined);
-      const message = error instanceof Error ? error.message : "Google sign-in failed.";
-      setGoogleError(message);
+      const message = error instanceof Error ? error.message : "Sign-in failed. Please try again.";
+      setSignInError(message);
       toast.error(message);
     } finally {
-      setIsGoogleLoading(false);
+      setIsSigningIn(false);
     }
   };
 
@@ -308,41 +286,6 @@ function LoginPage() {
                 <AgentLoginForm />
               ) : (
                 <>
-                  <div className="mb-6 space-y-3">
-                    <Button
-                      type="button"
-                      onClick={handleGoogleSignIn}
-                      disabled={!isSuperAdmin || isGoogleLoading}
-                      className="h-12 w-full rounded-xl font-semibold"
-                    >
-                      {isGoogleLoading ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Chrome className="size-4" />
-                      )}
-                      <span>
-                        {isGoogleLoading
-                          ? "Verifying Google account..."
-                          : isSuperAdmin
-                            ? "Continue with Google"
-                            : "Google sign-in is for Super Admins"}
-                      </span>
-                    </Button>
-                    {googleError && (
-                      <p className="flex items-center gap-1.5 text-xs font-medium text-destructive">
-                        <ShieldAlert className="size-3.5 shrink-0" />
-                        <span>{googleError}</span>
-                      </p>
-                    )}
-                    <div className="flex items-center gap-3" aria-hidden="true">
-                      <span className="h-px flex-1 bg-border" />
-                      <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                        Password access unavailable
-                      </span>
-                      <span className="h-px flex-1 bg-border" />
-                    </div>
-                  </div>
-
                   {/* Authentication Form */}
                   <form onSubmit={handleSubmit} noValidate className="space-y-5">
                     {/* ID / Email Field */}
@@ -484,8 +427,23 @@ function LoginPage() {
 
                     {/* Submit Login Button */}
                     <div className="pt-2">
-                      <Button type="submit" variant="outline" className="w-full rounded-xl text-xs">
-                        Password sign-in is not connected
+                      {signInError && (
+                        <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-destructive">
+                          <ShieldAlert className="size-3.5 shrink-0" />
+                          <span>{signInError}</span>
+                        </p>
+                      )}
+                      <Button
+                        type="submit"
+                        disabled={isSigningIn}
+                        className="h-12 w-full rounded-xl font-semibold"
+                      >
+                        {isSigningIn ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <ArrowRight className="size-4" />
+                        )}
+                        <span>{isSigningIn ? "Signing in..." : "Sign in as Super Admin"}</span>
                       </Button>
                     </div>
                   </form>

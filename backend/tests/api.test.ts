@@ -8,6 +8,7 @@ import {
   hasTestDatabase,
   resetDatabase,
   SUPER_ADMIN_EMAIL,
+  TEST_DATABASE_URL,
   tokenFor,
 } from "./helpers.js";
 
@@ -1009,6 +1010,135 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
     );
     expect(sales.status).toBe(200);
     expect(sales.body.data.summary.policiesSold).toBe(1);
+  });
+
+  // ─── Settings ───────────────────────────────────────────────────────────────
+  describe("system settings", () => {
+    it("lets a Super Admin read defaults without any stored rows", async () => {
+      const { status, body } = await call("GET", "/settings", ADMIN);
+      expect(status).toBe(200);
+      const byKey = Object.fromEntries(
+        body.data.items.map((item: { key: string; value: unknown }) => [item.key, item.value]),
+      );
+      expect(byKey["general.currency"]).toBe("INR");
+      expect(byKey["general.timezone"]).toBe("Asia/Kolkata");
+      expect(byKey["policy.allowAgentSales"]).toBe(true);
+    });
+
+    it("persists updates (visible on the next read) and audits them", async () => {
+      const update = await call("PATCH", "/settings", ADMIN, {
+        settings: {
+          "general.companyName": "Acme Insurance",
+          "notifications.emailEnabled": false,
+          "policy.defaultRenewalReminderDays": 45,
+        },
+      });
+      expect(update.status).toBe(200);
+      const again = await call("GET", "/settings", ADMIN);
+      const byKey = Object.fromEntries(
+        again.body.data.items.map((item: { key: string; value: unknown }) => [
+          item.key,
+          item.value,
+        ]),
+      );
+      expect(byKey["general.companyName"]).toBe("Acme Insurance");
+      expect(byKey["notifications.emailEnabled"]).toBe(false);
+      expect(byKey["policy.defaultRenewalReminderDays"]).toBe(45);
+      expect(again.body.data.lastUpdatedBy).toBe(SUPER_ADMIN_EMAIL);
+
+      const log = await db.auditLog.findFirstOrThrow({ where: { action: "settings.update" } });
+      const metadata = log.metadata as {
+        changedKeys: string[];
+        changes: Record<string, unknown>;
+      };
+      expect(metadata.changedKeys).toHaveLength(3);
+      // Free text is named but its value is never written to the audit log.
+      expect(metadata.changes).not.toHaveProperty("general.companyName");
+      expect(JSON.stringify(log)).not.toContain("Acme Insurance");
+      expect(metadata.changes["notifications.emailEnabled"]).toEqual({ from: true, to: false });
+    });
+
+    it("rejects unknown keys, bad types and empty updates", async () => {
+      for (const settings of [
+        { "database.url": "postgres://x" },
+        { "general.currency": "XYZ" },
+        { "policy.allowAgentSales": "yes" },
+        { "policy.defaultRenewalReminderDays": 0 },
+        {},
+      ]) {
+        const { status } = await call("PATCH", "/settings", ADMIN, { settings });
+        expect(status).toBe(400);
+      }
+      expect(await db.systemSetting.count()).toBe(0);
+    });
+
+    it("denies agents and unauthenticated callers", async () => {
+      expect((await call("GET", "/settings", AGENT_A)).status).toBe(403);
+      expect((await call("GET", "/settings/health", AGENT_A)).status).toBe(403);
+      const patch = await call("PATCH", "/settings", AGENT_A, {
+        settings: { "policy.allowAgentSales": false },
+      });
+      expect(patch.status).toBe(403);
+      expect((await call("GET", "/settings")).status).toBe(401);
+      expect(await db.systemSetting.count()).toBe(0);
+    });
+
+    it("reports health and configuration without leaking secrets", async () => {
+      const health = await call("GET", "/health");
+      expect(health.status).toBe(200);
+      expect(health.body.data.database).toBe("up");
+
+      const { status, body } = await call("GET", "/settings/health", ADMIN);
+      expect(status).toBe(200);
+      expect(body.data.database).toBe("up");
+      expect(body.data.configuration.firebase).toBe("configured");
+      expect(body.data.security.cookie.httpOnly).toBe(true);
+      expect(body.data.security.agentPasswordPolicy.minLength).toBe(8);
+      const text = JSON.stringify(body);
+      expect(text).not.toContain(TEST_DATABASE_URL!);
+      expect(text).not.toMatch(/postgres(ql)?:\/\//);
+      expect(text).not.toMatch(/PRIVATE KEY/);
+    });
+
+    it("enforces policy.allowAgentSales on the API, not just in the UI", async () => {
+      const customer = await call("POST", "/customers", AGENT_A, {
+        fullName: "Cust",
+        phone: "9333333333",
+      });
+      const sale = (headers: Record<string, string>) =>
+        call("POST", "/sold-policies", headers, {
+          policyId: activePolicyId,
+          customerId: customer.body.data.id,
+        });
+
+      await call("PATCH", "/settings", ADMIN, { settings: { "policy.allowAgentSales": false } });
+      const blocked = await sale(AGENT_A);
+      expect(blocked.status).toBe(403);
+      expect(blocked.body.error.code).toBe("FORBIDDEN");
+      expect(await db.soldPolicy.count()).toBe(0);
+      // Super Admin can still record sales.
+      expect((await sale(ADMIN)).status).toBe(201);
+
+      await call("PATCH", "/settings", ADMIN, { settings: { "policy.allowAgentSales": true } });
+      expect((await sale(AGENT_A)).status).toBe(201);
+    });
+
+    it("applies default policy and payment status to new unpaid sales", async () => {
+      const customer = await call("POST", "/customers", AGENT_A, {
+        fullName: "Cust",
+        phone: "9444444444",
+      });
+      await call("PATCH", "/settings", ADMIN, {
+        settings: { "policy.defaultPolicyStatus": "ACTIVE", "policy.defaultPaymentStatus": "DUE" },
+      });
+      const sale = await call("POST", "/sold-policies", AGENT_A, {
+        policyId: activePolicyId,
+        customerId: customer.body.data.id,
+      });
+      expect(sale.status).toBe(201);
+      expect(sale.body.data.policyStatus).toBe("ACTIVE");
+      expect(sale.body.data.paymentStatus).toBe("DUE");
+    });
   });
 
   // ─── Audit ──────────────────────────────────────────────────────────────────

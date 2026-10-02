@@ -2,9 +2,17 @@ import { apiRequest } from "./client";
 import type { CurrentUser } from "./types";
 
 export const authApi = {
-  /** Call once after Google sign-in: verifies the token and records the login. */
-  verify: () => apiRequest<CurrentUser>("/auth/verify", { method: "POST" }),
   me: () => apiRequest<CurrentUser>("/auth/me"),
+};
+
+/** Super Admin password sign-in; the session is an HttpOnly cookie set by the API. */
+export const adminAuthApi = {
+  login: (identifier: string, password: string) =>
+    apiRequest<AgentLoginResult>("/auth/admin/login", {
+      method: "POST",
+      auth: false,
+      body: { identifier, password },
+    }),
 };
 
 export interface AgentLoginResult {

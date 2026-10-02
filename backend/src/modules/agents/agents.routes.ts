@@ -10,6 +10,7 @@ import {
 } from "../../utils/response.js";
 import {
   agentCreatedSchema,
+  agentListItemSchema,
   agentIdParamsSchema,
   agentStatusBodySchema,
   agentWithStatsSchema,
@@ -46,7 +47,7 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
         description:
           "Search matches name, agent code, phone and email. Date range filters `joinedAt`.",
         querystring: listAgentsQuerySchema,
-        response: { 200: paginatedSchema(agentWithStatsSchema), ...errorResponses },
+        response: { 200: paginatedSchema(agentListItemSchema), ...errorResponses },
       },
     },
     async (request) => {

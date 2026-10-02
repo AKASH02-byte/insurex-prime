@@ -1,3 +1,13 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { adminKeys } from "@/lib/admin-queries";
+import { agentsApi, isApiConfigured } from "@/lib/api";
+import { toAgentFull } from "@/lib/api/admin-mappers";
+import {
+  AgentCredentialsDialog,
+  type AgentCredentials,
+} from "@/components/admin/AgentCredentialsDialog";
+import { previewDefaultPassword } from "@/lib/agent-credentials";
+import { useAdminAgents } from "@/hooks/use-admin-live-data";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDown,
@@ -36,7 +46,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Toaster } from "@/components/ui/sonner";
@@ -235,7 +245,7 @@ interface AgentFormModalProps {
   mode: "add" | "edit";
   initial?: AgentFormData;
   onClose: () => void;
-  onSubmit: (data: AgentFormData) => void;
+  onSubmit: (data: AgentFormData) => void | Promise<void>;
 }
 
 function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentFormModalProps) {
@@ -247,17 +257,18 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
 
   const isAdd = mode === "add";
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.phone) {
       toast.error("Please fill in all required fields.");
       return;
     }
     setSaving(true);
-    setTimeout(() => {
+    try {
+      await onSubmit(form);
+    } finally {
       setSaving(false);
-      onSubmit(form);
-    }, 600);
+    }
   };
 
   return (
@@ -292,16 +303,15 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
             </div>
             <div>
               <Label htmlFor="af-code" className="text-xs font-bold uppercase tracking-wider">
-                Producer Code <span className="text-destructive">*</span>
+                Agent ID
               </Label>
               <Input
                 id="af-code"
                 value={form.code}
                 onChange={(e) => set("code", e.target.value)}
-                placeholder="e.g. AGT-11"
+                placeholder={isAdd ? "Auto-generated if left empty" : "e.g. AGT-11"}
                 className="mt-1 h-10 rounded-xl"
                 disabled={!isAdd}
-                required
               />
             </div>
           </div>
@@ -446,17 +456,18 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
             {isAdd && (
               <div>
                 <Label htmlFor="af-pass" className="text-xs font-bold uppercase tracking-wider">
-                  Temporary Password <span className="text-destructive">*</span>
+                  Default Password
                 </Label>
                 <Input
                   id="af-pass"
-                  value=""
-                  placeholder="Generated securely by the server"
-                  className="mt-1 h-10 rounded-xl bg-muted/50"
+                  value={previewDefaultPassword(form.name, form.phone)}
+                  placeholder="First 5 letters of name @ phone"
+                  className="mt-1 h-10 rounded-xl bg-muted/50 font-mono"
                   readOnly
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Shown once after the agent is created; they must change it at first sign-in.
+                  Generated automatically. Agents sign in with their Agent ID or phone and must
+                  change it at first sign-in.
                 </p>
               </div>
             )}
@@ -794,7 +805,15 @@ function AdminAgentsPage() {
   const [exportOpen, setExportOpen] = useState(false);
 
   // Agent state (starts from mock data, supports create/update/toggle in-memory)
-  const [agents, setAgents] = useState<AgentFull[]>(agentsFullList);
+  const queryClient = useQueryClient();
+  const liveAgents = useAdminAgents();
+  const [agents, setAgents] = useState<AgentFull[]>(isApiConfigured ? [] : agentsFullList);
+  // Live mode: the API is the source of truth, refreshed after every change below.
+  useEffect(() => {
+    if (liveAgents.data) setAgents(liveAgents.data.data.map(toAgentFull));
+  }, [liveAgents.data]);
+  const [credentials, setCredentials] = useState<AgentCredentials | null>(null);
+  const refreshAgents = () => queryClient.invalidateQueries({ queryKey: adminKeys.agents });
 
   // Search + filter + sort state
   const [search, setSearch] = useState("");
@@ -873,11 +892,29 @@ function AdminAgentsPage() {
   };
 
   // Agent CRUD handlers
-  const handleAdd = (data: AgentFormData) => {
+  const handleAdd = async (data: AgentFormData) => {
+    let created: Awaited<ReturnType<typeof agentsApi.create>> | undefined;
+    if (isApiConfigured) {
+      // The server builds the default password (first 5 letters of the first name + "@" +
+      // phone), hashes it and flags the account for a password change at first sign-in.
+      try {
+        created = await agentsApi.create({
+          fullName: data.name.trim(),
+          email: data.email.trim(),
+          phone: data.phone.trim(),
+          ...(data.address.trim() ? { address: data.address.trim() } : {}),
+          ...(data.code.trim() ? { agentCode: data.code.trim() } : {}),
+          status: data.status === "Active" ? "ACTIVE" : "INACTIVE",
+        });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not create the agent.");
+        return;
+      }
+    }
     const newAgent: AgentFull = {
-      id: `agt-${Date.now()}`,
+      id: created?.id ?? `agt-${Date.now()}`,
       name: data.name,
-      code: data.code,
+      code: created?.agentCode ?? (data.code || `AGT-${Date.now().toString().slice(-6)}`),
       avatar: data.name
         .split(" ")
         .map((w) => w[0])
@@ -909,10 +946,37 @@ function AdminAgentsPage() {
     };
     setAgents((prev) => [newAgent, ...prev]);
     setAddOpen(false);
-    toast.success(`Agent ${data.name} created successfully!`);
+    if (created) void refreshAgents();
+    if (created) {
+      setCredentials({
+        name: data.name,
+        agentCode: created.agentCode,
+        phone: created.phone,
+        password: created.temporaryPassword,
+      });
+    } else {
+      toast.success(`Agent ${data.name} created successfully!`);
+    }
   };
 
-  const handleEdit = (data: AgentFormData) => {
+  const handleEdit = async (data: AgentFormData) => {
+    if (isApiConfigured && editAgent) {
+      try {
+        await agentsApi.update(editAgent.id, {
+          fullName: data.name.trim(),
+          email: data.email.trim(),
+          phone: data.phone.trim(),
+          address: data.address.trim(),
+        });
+        if (data.status !== editAgent.status) {
+          await agentsApi.setStatus(editAgent.id, data.status === "Active" ? "ACTIVE" : "INACTIVE");
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not update the agent.");
+        return;
+      }
+      void refreshAgents();
+    }
     setAgents((prev) =>
       prev.map((a) =>
         a.id === editAgent?.id
@@ -954,8 +1018,17 @@ function AdminAgentsPage() {
     toast.success("Agent profile updated successfully!");
   };
 
-  const handleToggleStatus = (agent: AgentFull) => {
+  const handleToggleStatus = async (agent: AgentFull) => {
     const newStatus = agent.status === "Active" ? "Inactive" : "Active";
+    if (isApiConfigured) {
+      try {
+        await agentsApi.setStatus(agent.id, newStatus === "Active" ? "ACTIVE" : "INACTIVE");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not change the status.");
+        return;
+      }
+      void refreshAgents();
+    }
     setAgents((prev) => prev.map((a) => (a.id === agent.id ? { ...a, status: newStatus } : a)));
     toast.success(
       `Agent ${agent.name} ${newStatus === "Active" ? "activated" : "deactivated"} successfully.`,
@@ -967,6 +1040,7 @@ function AdminAgentsPage() {
   return (
     <div className="min-h-screen bg-surface/30 text-foreground selection:bg-primary/20 selection:text-primary">
       <Toaster position="top-right" richColors />
+      <AgentCredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />
 
       <AdminSidebar
         currentPath="/admin/agents"
@@ -1144,13 +1218,14 @@ function AdminAgentsPage() {
 
             {/* Scrollable Table */}
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-xs min-w-[900px]">
+              <table className="w-full border-collapse text-left text-xs min-w-[1050px]">
                 <thead>
                   <tr className="border-b border-border/70 bg-surface/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     <th className="py-3 pl-5 pr-4">Agent</th>
                     <th className="py-3 px-4">Agent ID</th>
                     <th className="py-3 px-4">Phone</th>
                     <th className="py-3 px-4">Email</th>
+                    <th className="py-3 px-4">Password</th>
                     <th
                       className="py-3 px-4 text-center cursor-pointer hover:text-foreground select-none"
                       onClick={() => toggleSort("policiesSold")}
@@ -1195,7 +1270,7 @@ function AdminAgentsPage() {
                 <tbody className="divide-y divide-border/50">
                   {filteredAgents.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-16 text-center text-sm text-muted-foreground">
+                      <td colSpan={10} className="py-16 text-center text-sm text-muted-foreground">
                         <UsersRound className="size-10 mx-auto opacity-20 mb-3" />
                         <p>No agents match your current filters.</p>
                         <button
@@ -1253,6 +1328,25 @@ function AdminAgentsPage() {
                           <span className="truncate block text-muted-foreground">
                             {agent.email}
                           </span>
+                        </td>
+
+                        {/* Password (Super Admin only; passwords are stored hashed) */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {agent.password ? (
+                            <span
+                              title="Default password — the agent has not changed it yet"
+                              className="rounded-md border border-border/50 bg-surface/80 px-2 py-0.5 font-mono text-[11px] font-bold text-foreground select-all"
+                            >
+                              {agent.password}
+                            </span>
+                          ) : (
+                            <span
+                              title="Chosen by the agent and stored hashed, so it cannot be shown"
+                              className="text-[11px] text-muted-foreground"
+                            >
+                              {isApiConfigured ? "Changed by agent" : "—"}
+                            </span>
+                          )}
                         </td>
 
                         {/* Policies Sold */}

@@ -23,6 +23,11 @@ import {
   type RecentPolicySale,
 } from "@/components/admin/admin-mock-data";
 import { dashboardApi, isApiConfigured, type DashboardSummary } from "@/lib/api";
+import { adminKeys, liveQueryOptions } from "@/lib/admin-queries";
+import { useAdminAgentPerformance, useAdminRecentSales } from "@/hooks/use-admin-live-data";
+
+const NO_SALES: RecentPolicySale[] = [];
+const NO_AGENTS: AgentPerformanceRecord[] = [];
 
 export const Route = createFileRoute("/admin/dashboard")({
   beforeLoad: requireAdminSession,
@@ -93,8 +98,13 @@ function SuperAdminDashboard() {
   };
 
   // Filtered recent policies
+  const liveSales = useAdminRecentSales(10).sales;
+  const liveAgents = useAdminAgentPerformance(10).agents;
+  const salesSource = isApiConfigured ? (liveSales ?? NO_SALES) : recentPolicySalesList;
+  const agentsSource = isApiConfigured ? (liveAgents ?? NO_AGENTS) : agentPerformanceList;
+
   const filteredPolicies: RecentPolicySale[] = useMemo(() => {
-    return recentPolicySalesList.filter((item) => {
+    return salesSource.filter((item) => {
       // Policy Type filter
       if (filters.policyType !== "All" && item.policyType !== filters.policyType) {
         return false;
@@ -119,11 +129,11 @@ function SuperAdminDashboard() {
       }
       return true;
     });
-  }, [filters, searchQuery]);
+  }, [salesSource, filters, searchQuery]);
 
   // Filtered agents
   const filteredAgents: AgentPerformanceRecord[] = useMemo(() => {
-    return agentPerformanceList.filter((agent) => {
+    return agentsSource.filter((agent) => {
       if (filters.agent !== "All" && agent.name !== filters.agent) {
         return false;
       }
@@ -137,7 +147,7 @@ function SuperAdminDashboard() {
       }
       return true;
     });
-  }, [filters.agent, searchQuery]);
+  }, [agentsSource, filters.agent, searchQuery]);
 
   // Dynamically adjusted KPI metrics based on filter selection
   const dynamicKpiStats: KpiStats = useMemo(() => {
@@ -194,9 +204,10 @@ function SuperAdminDashboard() {
 
   // With VITE_API_BASE_URL set, KPI cards show real backend figures.
   const liveSummary = useQuery({
-    queryKey: ["dashboard", "summary"],
+    queryKey: adminKeys.summary,
     queryFn: () => dashboardApi.summary(),
     enabled: isApiConfigured && typeof window !== "undefined",
+    ...liveQueryOptions,
   });
   const kpiStats: KpiStats = isApiConfigured
     ? toKpiStats(

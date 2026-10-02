@@ -37,6 +37,11 @@ const envSchema = z
     FRONTEND_URL: csvList,
     // Comma-separated emails that are provisioned as SUPER_ADMIN on first sign-in.
     SUPER_ADMIN_EMAILS: csvList.transform((emails) => emails.map((email) => email.toLowerCase())),
+    // Password sign-in for the Super Admin: any ID in ADMIN_LOGIN_IDS (an email and/or phone,
+    // comma-separated) plus ADMIN_PASSWORD. Keep the password in the environment, never in code.
+    // The first ID containing "@" is the Super Admin account's email.
+    ADMIN_LOGIN_IDS: csvList.transform((ids) => ids.map((id) => id.toLowerCase())),
+    ADMIN_PASSWORD: optionalString,
     // Set to true only when running behind a trusted reverse proxy / load balancer.
     TRUST_PROXY: z
       .enum(["true", "false"])

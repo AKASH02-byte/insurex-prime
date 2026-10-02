@@ -25,12 +25,13 @@ import { signOutFromGoogle } from "@/lib/firebase-client";
 /** Mirrors the backend checks so most mistakes are caught before a request. */
 function validateIdentifier(raw: string): string | undefined {
   const value = raw.trim();
-  if (!value) return "Enter your agent code or email.";
+  if (!value) return "Enter your agent code, phone number or email.";
   if (value.includes("@")) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? undefined : "Enter a valid email address.";
   }
+  if (/^\+?[\d\s-]{7,20}$/.test(value)) return undefined;
   if (!/^[A-Za-z0-9-]{3,32}$/.test(value)) {
-    return "Agent codes contain only letters, numbers and dashes (e.g. AGT-DEMO1).";
+    return "Enter your agent code (e.g. AGT-DEMO1), phone number or email.";
   }
   return undefined;
 }
@@ -108,7 +109,7 @@ export function AgentLoginForm() {
             htmlFor="agent-identifier"
             className="text-xs font-bold uppercase tracking-wider text-foreground"
           >
-            Agent Code / Email
+            Agent ID / Phone / Email
           </Label>
           <span className="text-[11px] font-medium text-muted-foreground">e.g. AGT-DEMO1</span>
         </div>
@@ -130,7 +131,7 @@ export function AgentLoginForm() {
               setFormError(undefined);
             }}
             onBlur={() => identifier && setIdentifierError(validateIdentifier(identifier))}
-            placeholder="Agent code or registered email"
+            placeholder="Agent code, phone or email"
             aria-invalid={Boolean(identifierError)}
             aria-describedby={identifierError ? "agent-identifier-error" : undefined}
             className={`h-12 rounded-xl bg-background pl-10 pr-4 text-sm ${

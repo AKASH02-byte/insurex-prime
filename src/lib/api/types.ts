@@ -29,6 +29,12 @@ export interface ApiAgent extends AgentRef {
   stats?: { customers: number; policiesSold: number };
 }
 
+/** Row of the Super Admin agents list. */
+export interface ApiAgentListItem extends ApiAgent {
+  /** Default password while the agent has not changed it; null afterwards (hash-only). */
+  initialPassword: string | null;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;

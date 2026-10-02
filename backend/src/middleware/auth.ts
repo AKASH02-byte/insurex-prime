@@ -88,9 +88,6 @@ export const authPlugin = fp(
         throw new AppError(401, "TOKEN_EXPIRED", "Your session has expired. Please sign in again.");
       }
       const { user } = session;
-      if (user.role !== "AGENT") {
-        throw new AppError(401, "INVALID_TOKEN", "Your session has ended. Please sign in again.");
-      }
       assertCanSignIn(user);
 
       if (Date.now() - session.lastSeenAt.getTime() > LAST_SEEN_RESOLUTION_MS) {

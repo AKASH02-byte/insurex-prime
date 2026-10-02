@@ -39,6 +39,7 @@ import {
   type ApiSoldPolicyDetail,
 } from "@/lib/api";
 import type { Gender, InsuranceType } from "@/lib/api/types";
+import { adminKeys } from "@/lib/admin-queries";
 import { agentKeys } from "@/lib/agent-queries";
 import {
   formatDate,
@@ -461,9 +462,13 @@ function PolicyDetailsStep({
     onSuccess: async (sale) => {
       toast.success(`Policy ${sale.policyNumber} recorded for ${sale.customer.fullName}.`);
       await Promise.all(
-        [agentKeys.dashboardAll, agentKeys.soldPoliciesAll, agentKeys.customersAll].map(
-          (queryKey) => queryClient.invalidateQueries({ queryKey }),
-        ),
+        [
+          agentKeys.dashboardAll,
+          agentKeys.soldPoliciesAll,
+          agentKeys.customersAll,
+          // Same-browser Super Admin tabs refresh at once; other sessions pick it up on their poll.
+          adminKeys.all,
+        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
       );
       onSold(sale);
     },

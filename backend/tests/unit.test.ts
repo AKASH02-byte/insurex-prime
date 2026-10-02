@@ -7,6 +7,7 @@ import {
 } from "../src/modules/auth/agent-login.service.js";
 import { hashSessionToken, readSessionCookie } from "../src/modules/auth/agent-session.js";
 import {
+  generateDefaultAgentPassword,
   generateTemporaryPassword,
   hashPassword,
   newPasswordSchema,
@@ -102,6 +103,16 @@ describe("agent password sign-in", () => {
       seen.add(password);
     }
     expect(seen.size).toBe(50);
+  });
+
+  it("builds the default agent password from first name and phone", () => {
+    expect(generateDefaultAgentPassword("Rajesh Verma", "9876543210")).toBe("Rajes@9876543210");
+    expect(generateDefaultAgentPassword("  Raj Kumar ", "98765 43210")).toBe("Raj@9876543210");
+    expect(generateDefaultAgentPassword("Dr.Anil", "+91-98765-43210")).toBe("DrAni@919876543210");
+    expect(
+      newPasswordSchema.safeParse(generateDefaultAgentPassword("Rajesh Verma", "9876543210"))
+        .success,
+    ).toBe(true);
   });
 
   it("enforces the new-password policy", () => {
