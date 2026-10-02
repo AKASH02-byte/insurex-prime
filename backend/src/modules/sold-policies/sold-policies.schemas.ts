@@ -1,0 +1,103 @@
+import { z } from "zod";
+import {
+  InsuranceType,
+  PaymentMethod,
+  PaymentStatus,
+  SoldPolicyStatus,
+} from "../../generated/prisma/enums.js";
+import {
+  dateRangeQuerySchema,
+  orderQuerySchema,
+  paginationQuerySchema,
+  searchQuerySchema,
+} from "../../utils/pagination.js";
+import { agentRefSchema } from "../customers/customers.schemas.js";
+
+export const policyRefSchema = z
+  .object({
+    id: z.uuid(),
+    policyCode: z.string(),
+    policyName: z.string(),
+    insuranceType: z.enum(InsuranceType),
+  })
+  .meta({ id: "PolicyRef" });
+
+export const customerRefSchema = z
+  .object({ id: z.uuid(), customerCode: z.string(), fullName: z.string() })
+  .meta({ id: "CustomerRef" });
+
+export const soldPolicySchema = z
+  .object({
+    id: z.uuid(),
+    policyNumber: z.string(),
+    policy: policyRefSchema,
+    customer: customerRefSchema,
+    agent: agentRefSchema,
+    premium: z.number(),
+    amountPaid: z.number().describe("Sum of PAID receipts"),
+    issueDate: z.string().describe("YYYY-MM-DD"),
+    expiryDate: z.string().describe("YYYY-MM-DD"),
+    paymentStatus: z.enum(PaymentStatus),
+    policyStatus: z.enum(SoldPolicyStatus),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .meta({ id: "SoldPolicy" });
+
+export const soldPolicyDetailSchema = soldPolicySchema
+  .extend({
+    receipts: z.array(
+      z.object({
+        id: z.uuid(),
+        receiptNumber: z.string(),
+        amount: z.number(),
+        paymentMethod: z.enum(PaymentMethod),
+        paymentStatus: z.enum(PaymentStatus),
+        issuedAt: z.iso.datetime(),
+      }),
+    ),
+  })
+  .meta({ id: "SoldPolicyDetail" });
+
+export const soldPolicyIdParamsSchema = z.object({ id: z.uuid() });
+
+export const listSoldPoliciesQuerySchema = paginationQuerySchema
+  .extend(searchQuerySchema.shape)
+  .extend(orderQuerySchema.shape)
+  .extend(dateRangeQuerySchema.shape)
+  .extend({
+    policyStatus: z.enum(SoldPolicyStatus).optional(),
+    paymentStatus: z.enum(PaymentStatus).optional(),
+    insuranceType: z.enum(InsuranceType).optional(),
+    agentId: z.uuid().optional().describe("SUPER_ADMIN only; ignored for agents"),
+    customerId: z.uuid().optional(),
+    policyId: z.uuid().optional(),
+    sortBy: z.enum(["issueDate", "expiryDate", "createdAt", "premium"]).default("issueDate"),
+  });
+
+export const createSoldPolicyBodySchema = z.object({
+  policyId: z.uuid(),
+  customerId: z.uuid(),
+  issueDate: z.iso.date().optional().describe("YYYY-MM-DD; defaults to today"),
+  agentId: z
+    .uuid()
+    .optional()
+    .describe("SUPER_ADMIN only; defaults to the customer's agent. Ignored for agents."),
+  premium: z
+    .number()
+    .positive()
+    .max(1e10)
+    .optional()
+    .describe("SUPER_ADMIN only override; defaults to the catalog premium. Ignored for agents."),
+});
+
+export const updateSoldPolicyBodySchema = z
+  .object({
+    policyStatus: z.enum(SoldPolicyStatus),
+    paymentStatus: z.enum(PaymentStatus),
+    issueDate: z.iso.date(),
+    expiryDate: z.iso.date(),
+    premium: z.number().positive().max(1e10),
+  })
+  .partial()
+  .refine((body) => Object.keys(body).length > 0, "at least one field is required");

@@ -1,7 +1,7 @@
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import Fastify, { type FastifyServerOptions } from "fastify";
+import Fastify, { LogController, type FastifyServerOptions } from "fastify";
 import {
   jsonSchemaTransform,
   serializerCompiler,
@@ -45,9 +45,10 @@ export async function buildApp(deps: AppDependencies) {
       },
     },
     genReqId,
-    requestIdLogLabel: "requestId",
+    logController: new LogController({ requestIdLogLabel: "requestId" }),
     trustProxy: env.TRUST_PROXY,
     bodyLimit: 1024 * 1024,
+    routerOptions: { ignoreTrailingSlash: true },
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);
