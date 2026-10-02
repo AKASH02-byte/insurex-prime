@@ -52,7 +52,7 @@ function getSessionConfig() {
     maxAge: sessionLifetimeSeconds,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV !== "development",
+      secure: process.env["NODE_ENV"] !== "development",
       sameSite: "lax" as const,
       path: "/",
     },
@@ -60,7 +60,7 @@ function getSessionConfig() {
 }
 
 function getAllowedAdminEmails() {
-  return (process.env.AUTH_ADMIN_EMAILS ?? "")
+  return (process.env["AUTH_ADMIN_EMAILS"] ?? "")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
@@ -92,6 +92,14 @@ export const exchangeFirebaseIdentity = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const apiKey = getFirebaseApiKey();
     const config = getSessionConfig();
+    const sessionSecret = process.env["AUTH_SESSION_SECRET"];
+
+    // Safe diagnostics: presence/length only, never values.
+    console.info("[admin-auth] config check", {
+      firebaseApiKeyPresent: Boolean(apiKey),
+      authSessionSecretPresent: Boolean(sessionSecret),
+      authSessionSecretLengthOk: Boolean(sessionSecret && sessionSecret.length >= 32),
+    });
 
     if (!apiKey || !config) {
       logAuthEnvDiagnostics("Missing or invalid server auth environment variables.");

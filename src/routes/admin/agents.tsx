@@ -84,8 +84,7 @@ type SortField = "policiesSold" | "premiumGenerated" | "joinDate";
 type SortDir = "asc" | "desc";
 
 const STATUS_COLORS = {
-  Active:
-    "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+  Active: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   Inactive: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
@@ -177,11 +176,7 @@ function StatusBadge({ status }: { status: AgentFull["status"] }) {
     <span
       className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${STATUS_COLORS[status]}`}
     >
-      {status === "Active" ? (
-        <CheckCircle2 className="size-3" />
-      ) : (
-        <XCircle className="size-3" />
-      )}
+      {status === "Active" ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
       {status}
     </span>
   );
@@ -669,7 +664,9 @@ function AgentDetailDrawer({
                   >
                     <div>
                       <span className="font-mono font-bold text-foreground">{p.policyNumber}</span>
-                      <p className="text-muted-foreground mt-0.5">{p.customerName} · {p.policyName}</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {p.customerName} · {p.policyName}
+                      </p>
                     </div>
                     <div className="text-right">
                       <span className="font-bold text-foreground">{formatINR(p.premium)}</span>
@@ -754,7 +751,12 @@ function AgentPerformanceCharts() {
             data={agentPoliciesChartData}
             margin={{ top: 5, right: 5, left: metric === "premiumGenerated" ? 30 : -10, bottom: 0 }}
           >
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" opacity={0.08} />
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              stroke="currentColor"
+              opacity={0.08}
+            />
             <XAxis
               dataKey="name"
               tickLine={false}
@@ -788,12 +790,7 @@ function AgentPerformanceCharts() {
                 return null;
               }}
             />
-            <Bar
-              dataKey={metric}
-              fill="var(--primary)"
-              radius={[6, 6, 0, 0]}
-              maxBarSize={50}
-            />
+            <Bar dataKey={metric} fill="var(--primary)" radius={[6, 6, 0, 0]} maxBarSize={50} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -975,9 +972,7 @@ function AdminAgentsPage() {
 
   const handleToggleStatus = (agent: AgentFull) => {
     const newStatus = agent.status === "Active" ? "Inactive" : "Active";
-    setAgents((prev) =>
-      prev.map((a) => (a.id === agent.id ? { ...a, status: newStatus } : a)),
-    );
+    setAgents((prev) => prev.map((a) => (a.id === agent.id ? { ...a, status: newStatus } : a)));
     toast.success(
       `Agent ${agent.name} ${newStatus === "Active" ? "activated" : "deactivated"} successfully.`,
     );
@@ -997,7 +992,10 @@ function AdminAgentsPage() {
       />
 
       <div className="lg:pl-64 flex flex-col min-h-screen">
-        <AdminHeader onToggleSidebar={() => setSidebarOpen(true)} onOpenExport={() => setExportOpen(true)} />
+        <AdminHeader
+          onToggleSidebar={() => setSidebarOpen(true)}
+          onOpenExport={() => setExportOpen(true)}
+        />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
           {/* ── Page Header ──────────────────────────────────────────────── */}
@@ -1231,10 +1229,7 @@ function AdminAgentsPage() {
                     </tr>
                   ) : (
                     filteredAgents.map((agent) => (
-                      <tr
-                        key={agent.id}
-                        className="group hover:bg-muted/40 transition-colors"
-                      >
+                      <tr key={agent.id} className="group hover:bg-muted/40 transition-colors">
                         {/* Agent Name + Avatar */}
                         <td className="py-3.5 pl-5 pr-4">
                           <div className="flex items-center gap-3">
