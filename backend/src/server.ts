@@ -1,6 +1,7 @@
 import { buildApp } from "./app.js";
 import { createDatabase } from "./config/database.js";
 import { EnvValidationError, loadEnv } from "./config/env.js";
+import { createFirebaseTokenVerifier } from "./config/firebase.js";
 
 async function main() {
   let env;
@@ -15,7 +16,7 @@ async function main() {
   }
 
   const db = createDatabase(env.DATABASE_URL);
-  const app = await buildApp({ env, db });
+  const app = await buildApp({ env, db, tokenVerifier: createFirebaseTokenVerifier(env) });
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, "Shutting down");

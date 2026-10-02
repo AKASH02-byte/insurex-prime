@@ -10,6 +10,8 @@ import {
 } from "fastify-type-provider-zod";
 import type { Database } from "./config/database.js";
 import type { Env } from "./config/env.js";
+import type { TokenVerifier } from "./config/firebase.js";
+import { authPlugin } from "./middleware/auth.js";
 import { registerErrorHandler } from "./middleware/error-handler.js";
 import { genReqId, registerRequestIdHeader, REQUEST_ID_HEADER } from "./middleware/request-id.js";
 import { registerRoutes } from "./routes/index.js";
@@ -17,6 +19,8 @@ import { registerRoutes } from "./routes/index.js";
 export interface AppDependencies {
   env: Env;
   db: Database;
+  /** Firebase ID-token verifier (tests inject a fake). */
+  tokenVerifier: TokenVerifier;
   /** Override the logger (tests pass `false`). */
   logger?: FastifyServerOptions["logger"];
 }
@@ -52,6 +56,7 @@ export async function buildApp(deps: AppDependencies) {
   app.decorate("config", env);
   app.decorate("db", deps.db);
 
+  await app.register(authPlugin, { tokenVerifier: deps.tokenVerifier });
   registerRequestIdHeader(app);
   registerErrorHandler(app);
 
