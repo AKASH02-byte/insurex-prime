@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PaymentMethod, PaymentStatus } from "../../generated/prisma/enums.js";
+import { InsuranceType, PaymentMethod, PaymentStatus } from "../../generated/prisma/enums.js";
 import {
   dateRangeQuerySchema,
   orderQuerySchema,
@@ -17,6 +17,10 @@ export const receiptSchema = z
       id: z.uuid(),
       policyNumber: z.string(),
       policyName: z.string(),
+      insuranceType: z.enum(InsuranceType),
+      premium: z.number(),
+      issueDate: z.string().describe("YYYY-MM-DD"),
+      expiryDate: z.string().describe("YYYY-MM-DD"),
       customer: customerRefSchema,
       agent: agentRefSchema,
     }),

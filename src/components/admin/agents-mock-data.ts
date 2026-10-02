@@ -19,9 +19,8 @@ export interface AgentFull {
   status: "Active" | "Inactive";
   joinDate: string; // ISO date string "YYYY-MM-DD"
   rating: number;
-  specialization: "Health" | "Motor" | "Both";
+  specialization: "Health" | "Motor" | "Both" | "All";
   region: string;
-  licenseNumber: string;
   recentPolicies?: RecentPolicySale[];
   activity?: AgentActivity[];
 }
@@ -54,12 +53,26 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.9,
     specialization: "Both",
     region: "Mumbai North",
-    licenseNumber: "LIC-MH-2024-0101",
     recentPolicies: recentPolicySalesList.filter((p) => p.agentCode === "AGT-01").slice(0, 3),
     activity: [
-      { id: "a1", action: "Policy Issued", detail: "Health Gold (POL-10021) — Rahul Sharma", time: "10 mins ago" },
-      { id: "a2", action: "Policy Renewed", detail: "Two-Wheeler Protect (POL-10018) — Sandeep Roy", time: "2 hours ago" },
-      { id: "a3", action: "New Customer", detail: "Registered Deepika Rao as a new policyholder", time: "Yesterday" },
+      {
+        id: "a1",
+        action: "Policy Issued",
+        detail: "Health Gold (POL-10021) — Rahul Sharma",
+        time: "10 mins ago",
+      },
+      {
+        id: "a2",
+        action: "Policy Renewed",
+        detail: "Two-Wheeler Protect (POL-10018) — Sandeep Roy",
+        time: "2 hours ago",
+      },
+      {
+        id: "a3",
+        action: "New Customer",
+        detail: "Registered Deepika Rao as a new policyholder",
+        time: "Yesterday",
+      },
     ],
   },
   {
@@ -81,11 +94,20 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.8,
     specialization: "Motor",
     region: "Delhi NCR",
-    licenseNumber: "LIC-UP-2024-0202",
     recentPolicies: recentPolicySalesList.filter((p) => p.agentCode === "AGT-02").slice(0, 3),
     activity: [
-      { id: "a4", action: "Policy Issued", detail: "Car Comprehensive (POL-10020) — Arun Kumar", time: "30 mins ago" },
-      { id: "a5", action: "Commission Credited", detail: "₹6,200 commission credited for August", time: "Yesterday" },
+      {
+        id: "a4",
+        action: "Policy Issued",
+        detail: "Car Comprehensive (POL-10020) — Arun Kumar",
+        time: "30 mins ago",
+      },
+      {
+        id: "a5",
+        action: "Commission Credited",
+        detail: "₹6,200 commission credited for August",
+        time: "Yesterday",
+      },
     ],
   },
   {
@@ -107,10 +129,14 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.7,
     specialization: "Health",
     region: "Bengaluru South",
-    licenseNumber: "LIC-KA-2024-0303",
     recentPolicies: recentPolicySalesList.filter((p) => p.agentCode === "AGT-03").slice(0, 3),
     activity: [
-      { id: "a6", action: "Policy Issued", detail: "Family Floater Plus (POL-10019) — Meera Nair", time: "1 hour ago" },
+      {
+        id: "a6",
+        action: "Policy Issued",
+        detail: "Family Floater Plus (POL-10019) — Meera Nair",
+        time: "1 hour ago",
+      },
     ],
   },
   {
@@ -132,9 +158,13 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.6,
     specialization: "Health",
     region: "Ahmedabad Central",
-    licenseNumber: "LIC-GJ-2024-0404",
     activity: [
-      { id: "a7", action: "Policy Pending", detail: "Critical Care 360 (POL-10017) under review", time: "45 mins ago" },
+      {
+        id: "a7",
+        action: "Policy Pending",
+        detail: "Critical Care 360 (POL-10017) under review",
+        time: "45 mins ago",
+      },
     ],
   },
   {
@@ -156,9 +186,13 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.5,
     specialization: "Motor",
     region: "Kolkata East",
-    licenseNumber: "LIC-WB-2024-0505",
     activity: [
-      { id: "a8", action: "New Customer", detail: "Registered Rohit Das as a new policyholder", time: "3 hours ago" },
+      {
+        id: "a8",
+        action: "New Customer",
+        detail: "Registered Rohit Das as a new policyholder",
+        time: "3 hours ago",
+      },
     ],
   },
   {
@@ -180,9 +214,13 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.4,
     specialization: "Health",
     region: "Kochi Metro",
-    licenseNumber: "LIC-KL-2024-0606",
     activity: [
-      { id: "a9", action: "Policy Renewed", detail: "Senior Citizen Care (POL-10015) renewal processed", time: "4 hours ago" },
+      {
+        id: "a9",
+        action: "Policy Renewed",
+        detail: "Senior Citizen Care (POL-10015) renewal processed",
+        time: "4 hours ago",
+      },
     ],
   },
   {
@@ -204,9 +242,13 @@ export const agentsFullList: AgentFull[] = [
     rating: 3.9,
     specialization: "Both",
     region: "Lucknow Central",
-    licenseNumber: "LIC-UP-2024-0707",
     activity: [
-      { id: "a10", action: "Account Deactivated", detail: "Status set to Inactive pending re-training", time: "2 days ago" },
+      {
+        id: "a10",
+        action: "Account Deactivated",
+        detail: "Status set to Inactive pending re-training",
+        time: "2 days ago",
+      },
     ],
   },
   {
@@ -228,9 +270,13 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.5,
     specialization: "Health",
     region: "Chennai South",
-    licenseNumber: "LIC-TN-2024-0808",
     activity: [
-      { id: "a11", action: "Policy Issued", detail: "Health Gold Plus (POL-10028) — Suresh Menon", time: "1 day ago" },
+      {
+        id: "a11",
+        action: "Policy Issued",
+        detail: "Health Gold Plus (POL-10028) — Suresh Menon",
+        time: "1 day ago",
+      },
     ],
   },
   {
@@ -252,9 +298,13 @@ export const agentsFullList: AgentFull[] = [
     rating: 3.7,
     specialization: "Motor",
     region: "Pune West",
-    licenseNumber: "LIC-MH-2025-0909",
     activity: [
-      { id: "a12", action: "Account Deactivated", detail: "License renewal pending verification", time: "1 week ago" },
+      {
+        id: "a12",
+        action: "Account Deactivated",
+        detail: "License renewal pending verification",
+        time: "1 week ago",
+      },
     ],
   },
   {
@@ -276,9 +326,13 @@ export const agentsFullList: AgentFull[] = [
     rating: 4.6,
     specialization: "Both",
     region: "Hyderabad West",
-    licenseNumber: "LIC-TS-2024-1010",
     activity: [
-      { id: "a13", action: "Top Performer Badge", detail: "Ranked 2nd in Hyderabad region for Sep 2026", time: "3 days ago" },
+      {
+        id: "a13",
+        action: "Top Performer Badge",
+        detail: "Ranked 2nd in Hyderabad region for Sep 2026",
+        time: "3 days ago",
+      },
     ],
   },
 ];

@@ -11,6 +11,8 @@ import { parseDateOnly } from "../../utils/format.js";
 import { buildMeta, toDateFilter, toSkipTake } from "../../utils/pagination.js";
 import { containsInsensitive } from "../../utils/search.js";
 import { changedFields, recordAudit } from "../audit-logs/audit-logs.service.js";
+import { revokeUserSessions } from "../auth/agent-session.js";
+import { generateTemporaryPassword, hashPassword } from "../auth/password.js";
 import {
   toAgentDto,
   type AgentWithUser,
@@ -83,6 +85,10 @@ export async function createAgent(
     throw conflict(`Agent code ${body.agentCode} is already in use.`);
   }
 
+  // The Super Admin hands this to the agent; only its hash is stored.
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+
   const agent = await withGeneratedCode(
     () => body.agentCode ?? randomCode("AGT"),
     (agentCode) =>
@@ -95,8 +101,10 @@ export async function createAgent(
             address: body.address ?? null,
             status: body.status,
             ...(body.joinedAt ? { joinedAt: parseDateOnly(body.joinedAt) } : {}),
-            // The user signs in later with Google using this email.
-            user: { create: { email: body.email, role: "AGENT" } },
+            // Signs in with agent code or email + the temporary password, then picks their own.
+            user: {
+              create: { email: body.email, role: "AGENT", passwordHash, mustChangePassword: true },
+            },
           },
           include: agentInclude,
         });
@@ -110,7 +118,29 @@ export async function createAgent(
       }),
     body.agentCode ? 1 : 5,
   );
-  return toAgentWithStats(agent);
+  return { ...toAgentWithStats(agent), temporaryPassword };
+}
+
+/** Issues a new temporary password and signs the agent out everywhere. */
+export async function resetAgentPassword(db: Database, request: FastifyRequest, id: string) {
+  const agent = await db.agent.findUnique({ where: { id }, select: { userId: true } });
+  if (!agent) throw notFound("Agent");
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: agent.userId },
+      data: { passwordHash, mustChangePassword: true, passwordChangedAt: new Date() },
+    });
+    await revokeUserSessions(tx, agent.userId);
+    await recordAudit(tx, request, {
+      action: "agent.password_reset",
+      entity: "Agent",
+      entityId: id,
+    });
+  });
+  return { temporaryPassword };
 }
 
 export async function updateAgent(
@@ -170,6 +200,8 @@ export async function setAgentStatus(
       data: { status },
       include: agentInclude,
     });
+    // Suspended or inactive agents are blocked on every request anyway; end their sessions too.
+    if (status !== "ACTIVE") await revokeUserSessions(tx, updated.userId);
     await recordAudit(tx, request, {
       action: "agent.status",
       entity: "Agent",

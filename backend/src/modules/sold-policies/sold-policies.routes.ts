@@ -10,8 +10,10 @@ import {
 import {
   createSoldPolicyBodySchema,
   listSoldPoliciesQuerySchema,
+  quoteSoldPolicyQuerySchema,
   soldPolicyDetailSchema,
   soldPolicyIdParamsSchema,
+  soldPolicyQuoteSchema,
   soldPolicySchema,
   updateSoldPolicyBodySchema,
 } from "./sold-policies.schemas.js";
@@ -19,6 +21,7 @@ import {
   createSoldPolicy,
   getSoldPolicy,
   listSoldPolicies,
+  quoteSoldPolicy,
   updateSoldPolicy,
 } from "./sold-policies.service.js";
 
@@ -48,6 +51,22 @@ export const soldPolicyRoutes: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.get(
+    "/quote",
+    {
+      schema: {
+        tags,
+        security,
+        summary: "Preview a sale (premium and expiry) without recording it",
+        description:
+          "Runs the same checks as recording a sale (customer ownership, ACTIVE policy, issue date) and returns the server-computed premium and expiry date.",
+        querystring: quoteSoldPolicyQuerySchema,
+        response: { 200: successSchema(soldPolicyQuoteSchema), ...errorResponses },
+      },
+    },
+    async (request) => ok(await quoteSoldPolicy(app.db, requireAuth(request), request.query)),
+  );
+
+  app.get(
     "/:id",
     {
       schema: {
@@ -69,7 +88,7 @@ export const soldPolicyRoutes: FastifyPluginAsyncZod = async (app) => {
         security,
         summary: "Record a policy sale",
         description:
-          "The policy must be ACTIVE. AGENT callers can sell only to their own customers, at the catalog premium; the sale is always attributed to the calling agent. Expiry is computed from the policy duration. New sales start PENDING until paid.",
+          "The policy must be ACTIVE. AGENT callers can sell only to their own ACTIVE/PENDING customers, at the catalog premium, with an issue date from 30 days ago to 90 days ahead; the sale is always attributed to the calling agent. Expiry and the policy number are generated on the server. With `paymentMethod`, a PAID receipt for the full premium is created atomically and the policy starts ACTIVE; otherwise it starts PENDING until paid.",
         body: createSoldPolicyBodySchema,
         response: { 201: successSchema(soldPolicyDetailSchema), ...errorResponses },
       },

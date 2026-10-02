@@ -15,7 +15,7 @@ async function main() {
     throw error;
   }
 
-  const db = createDatabase(env.DATABASE_URL);
+  const db = createDatabase(env.DATABASE_URL, env.DATABASE_POOL_MAX);
   const app = await buildApp({ env, db, tokenVerifier: createFirebaseTokenVerifier(env) });
 
   const shutdown = async (signal: string) => {

@@ -84,8 +84,7 @@ type SortField = "policiesSold" | "premiumGenerated" | "joinDate";
 type SortDir = "asc" | "desc";
 
 const STATUS_COLORS = {
-  Active:
-    "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+  Active: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   Inactive: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
@@ -93,6 +92,7 @@ const SPEC_COLORS = {
   Health: "bg-primary/10 text-primary border-primary/20",
   Motor: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   Both: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20",
+  All: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -177,11 +177,7 @@ function StatusBadge({ status }: { status: AgentFull["status"] }) {
     <span
       className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${STATUS_COLORS[status]}`}
     >
-      {status === "Active" ? (
-        <CheckCircle2 className="size-3" />
-      ) : (
-        <XCircle className="size-3" />
-      )}
+      {status === "Active" ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
       {status}
     </span>
   );
@@ -199,9 +195,8 @@ interface AgentFormData {
   joinDate: string;
   status: "Active" | "Inactive";
   tempPassword: string;
-  specialization: "Health" | "Motor" | "Both";
+  specialization: "Health" | "Motor" | "Both" | "All";
   region: string;
-  licenseNumber: string;
 }
 
 const emptyForm: AgentFormData = {
@@ -217,7 +212,6 @@ const emptyForm: AgentFormData = {
   tempPassword: "",
   specialization: "Both",
   region: "",
-  licenseNumber: "",
 };
 
 function toFormData(agent: AgentFull): AgentFormData {
@@ -234,7 +228,6 @@ function toFormData(agent: AgentFull): AgentFormData {
     tempPassword: "",
     specialization: agent.specialization,
     region: agent.region,
-    licenseNumber: agent.licenseNumber,
   };
 }
 
@@ -252,6 +245,8 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
   const set = (key: keyof AgentFormData, val: string) =>
     setForm((prev) => ({ ...prev, [key]: val }));
 
+  const isAdd = mode === "add";
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.phone) {
@@ -264,8 +259,6 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
       onSubmit(form);
     }, 600);
   };
-
-  const isAdd = mode === "add";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -299,7 +292,7 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
             </div>
             <div>
               <Label htmlFor="af-code" className="text-xs font-bold uppercase tracking-wider">
-                Agent ID / Code <span className="text-destructive">*</span>
+                Producer Code <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="af-code"
@@ -401,6 +394,7 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
                 <option value="Health">Health Insurance</option>
                 <option value="Motor">Motor Insurance</option>
                 <option value="Both">Both</option>
+                <option value="All">All</option>
               </select>
             </div>
             <div>
@@ -417,20 +411,8 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
             </div>
           </div>
 
-          {/* License + Join Date */}
+          {/* Join Date */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="af-license" className="text-xs font-bold uppercase tracking-wider">
-                License Number
-              </Label>
-              <Input
-                id="af-license"
-                value={form.licenseNumber}
-                onChange={(e) => set("licenseNumber", e.target.value)}
-                placeholder="LIC-MH-2024-XXXX"
-                className="mt-1 h-10 rounded-xl"
-              />
-            </div>
             <div>
               <Label htmlFor="af-join" className="text-xs font-bold uppercase tracking-wider">
                 Date of Joining
@@ -468,13 +450,14 @@ function AgentFormModal({ mode, initial = emptyForm, onClose, onSubmit }: AgentF
                 </Label>
                 <Input
                   id="af-pass"
-                  type="password"
-                  value={form.tempPassword}
-                  onChange={(e) => set("tempPassword", e.target.value)}
-                  placeholder="Min 8 characters"
-                  className="mt-1 h-10 rounded-xl"
-                  required={isAdd}
+                  value=""
+                  placeholder="Generated securely by the server"
+                  className="mt-1 h-10 rounded-xl bg-muted/50"
+                  readOnly
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Shown once after the agent is created; they must change it at first sign-in.
+                </p>
               </div>
             )}
           </div>
@@ -599,7 +582,6 @@ function AgentDetailDrawer({
                 label: "Address",
                 value: `${agent.address}, ${agent.city}, ${agent.state} — ${agent.pincode}`,
               },
-              { icon: Shield, label: "License", value: agent.licenseNumber },
               { icon: MapPin, label: "Region", value: agent.region },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-3">
@@ -669,7 +651,9 @@ function AgentDetailDrawer({
                   >
                     <div>
                       <span className="font-mono font-bold text-foreground">{p.policyNumber}</span>
-                      <p className="text-muted-foreground mt-0.5">{p.customerName} · {p.policyName}</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {p.customerName} · {p.policyName}
+                      </p>
                     </div>
                     <div className="text-right">
                       <span className="font-bold text-foreground">{formatINR(p.premium)}</span>
@@ -754,7 +738,12 @@ function AgentPerformanceCharts() {
             data={agentPoliciesChartData}
             margin={{ top: 5, right: 5, left: metric === "premiumGenerated" ? 30 : -10, bottom: 0 }}
           >
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" opacity={0.08} />
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              stroke="currentColor"
+              opacity={0.08}
+            />
             <XAxis
               dataKey="name"
               tickLine={false}
@@ -788,12 +777,7 @@ function AgentPerformanceCharts() {
                 return null;
               }}
             />
-            <Bar
-              dataKey={metric}
-              fill="var(--primary)"
-              radius={[6, 6, 0, 0]}
-              maxBarSize={50}
-            />
+            <Bar dataKey={metric} fill="var(--primary)" radius={[6, 6, 0, 0]} maxBarSize={50} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -914,7 +898,6 @@ function AdminAgentsPage() {
       rating: 4.0,
       specialization: data.specialization,
       region: data.region,
-      licenseNumber: data.licenseNumber,
       activity: [
         {
           id: `act-${Date.now()}`,
@@ -944,7 +927,6 @@ function AdminAgentsPage() {
               status: data.status,
               specialization: data.specialization,
               region: data.region,
-              licenseNumber: data.licenseNumber,
             }
           : a,
       ),
@@ -964,7 +946,6 @@ function AdminAgentsPage() {
               status: data.status,
               specialization: data.specialization,
               region: data.region,
-              licenseNumber: data.licenseNumber,
             }
           : prev,
       );
@@ -975,9 +956,7 @@ function AdminAgentsPage() {
 
   const handleToggleStatus = (agent: AgentFull) => {
     const newStatus = agent.status === "Active" ? "Inactive" : "Active";
-    setAgents((prev) =>
-      prev.map((a) => (a.id === agent.id ? { ...a, status: newStatus } : a)),
-    );
+    setAgents((prev) => prev.map((a) => (a.id === agent.id ? { ...a, status: newStatus } : a)));
     toast.success(
       `Agent ${agent.name} ${newStatus === "Active" ? "activated" : "deactivated"} successfully.`,
     );
@@ -997,7 +976,10 @@ function AdminAgentsPage() {
       />
 
       <div className="lg:pl-64 flex flex-col min-h-screen">
-        <AdminHeader onToggleSidebar={() => setSidebarOpen(true)} onOpenExport={() => setExportOpen(true)} />
+        <AdminHeader
+          onToggleSidebar={() => setSidebarOpen(true)}
+          onOpenExport={() => setExportOpen(true)}
+        />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
           {/* ── Page Header ──────────────────────────────────────────────── */}
@@ -1231,10 +1213,7 @@ function AdminAgentsPage() {
                     </tr>
                   ) : (
                     filteredAgents.map((agent) => (
-                      <tr
-                        key={agent.id}
-                        className="group hover:bg-muted/40 transition-colors"
-                      >
+                      <tr key={agent.id} className="group hover:bg-muted/40 transition-colors">
                         {/* Agent Name + Avatar */}
                         <td className="py-3.5 pl-5 pr-4">
                           <div className="flex items-center gap-3">
