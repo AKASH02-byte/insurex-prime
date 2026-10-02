@@ -19,7 +19,7 @@ interface FirebaseAccountLookup {
 const sessionLifetimeSeconds = 60 * 60 * 24 * 30;
 
 function getSessionConfig() {
-  const password = process.env.AUTH_SESSION_SECRET;
+  const password = process.env["AUTH_SESSION_SECRET"];
   if (!password || password.length < 32) return null;
 
   return {
@@ -28,7 +28,7 @@ function getSessionConfig() {
     maxAge: sessionLifetimeSeconds,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV !== "development",
+      secure: process.env["NODE_ENV"] !== "development",
       sameSite: "lax" as const,
       path: "/",
     },
@@ -36,7 +36,7 @@ function getSessionConfig() {
 }
 
 function getAllowedAdminEmails() {
-  return (process.env.AUTH_ADMIN_EMAILS ?? "")
+  return (process.env["AUTH_ADMIN_EMAILS"] ?? "")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
@@ -66,9 +66,9 @@ export const getAdminSession = createServerFn({ method: "GET" }).handler(async (
 export const exchangeFirebaseIdentity = createServerFn({ method: "POST" })
   .validator(z.object({ idToken: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const apiKey = process.env.FIREBASE_API_KEY ?? process.env.VITE_FIREBASE_API_KEY;
+    const apiKey = process.env["FIREBASE_API_KEY"] ?? process.env["VITE_FIREBASE_API_KEY"];
     const config = getSessionConfig();
-    const sessionSecret = process.env.AUTH_SESSION_SECRET;
+    const sessionSecret = process.env["AUTH_SESSION_SECRET"];
 
     // Safe diagnostics: presence/length only, never values.
     console.info("[admin-auth] config check", {
