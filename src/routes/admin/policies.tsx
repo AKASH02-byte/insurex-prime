@@ -24,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Bar,
   BarChart,
@@ -77,12 +77,12 @@ import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { requireAdminSession } from "@/lib/admin-route-guard";
+import { usePolicyCatalog, type PolicyCatalog, type PolicyKpis } from "@/hooks/use-policy-catalog";
 import {
   formatINR,
   formatPolicyDuration,
   motorCoverageTypes,
   policyDurationOptions,
-  policyProductsList,
   policyTypeColors,
   premiumFrequencies,
   premiumRanges,
@@ -265,25 +265,19 @@ function PolicyTypeBadge({ type }: { type: PolicyInsuranceType }) {
   );
 }
 
-function PolicyKpiCards({ policies }: { policies: PolicyProduct[] }) {
-  const active = policies.filter((policy) => policy.status === "Active");
-  const health = policies.filter((policy) => policy.type === "Health");
-  const motor = policies.filter((policy) => policy.type === "Motor");
-  const activeOf = (list: PolicyProduct[]) =>
-    list.filter((policy) => policy.status === "Active").length;
-
+function PolicyKpiCards({ kpis }: { kpis: PolicyKpis }) {
   const cards = [
     {
       label: "Total Policies",
-      value: policies.length,
-      hint: `${policies.length - active.length} inactive`,
+      value: kpis.total,
+      hint: `${kpis.total - kpis.active} inactive`,
       icon: Shield,
       color: "text-primary",
       bg: "bg-primary/10",
     },
     {
       label: "Active Policies",
-      value: active.length,
+      value: kpis.active,
       hint: "Available to agents",
       icon: ShieldCheck,
       color: "text-emerald-700 dark:text-emerald-400",
@@ -291,16 +285,16 @@ function PolicyKpiCards({ policies }: { policies: PolicyProduct[] }) {
     },
     {
       label: "Health Policies",
-      value: health.length,
-      hint: `${activeOf(health)} active`,
+      value: kpis.health,
+      hint: `${kpis.healthActive} active`,
       icon: HeartPulse,
       color: "text-rose-700 dark:text-rose-400",
       bg: "bg-rose-500/10",
     },
     {
       label: "Motor Policies",
-      value: motor.length,
-      hint: `${activeOf(motor)} active`,
+      value: kpis.motor,
+      hint: `${kpis.motorActive} active`,
       icon: Car,
       color: "text-sky-700 dark:text-sky-400",
       bg: "bg-sky-500/10",
@@ -340,23 +334,21 @@ function PolicyKpiCards({ policies }: { policies: PolicyProduct[] }) {
   );
 }
 
-function PolicyAnalytics({ policies }: { policies: PolicyProduct[] }) {
-  const typeData = (["Health", "Motor"] as PolicyInsuranceType[]).map((type) => ({
-    name: type,
-    sold: policies
-      .filter((policy) => policy.type === type)
-      .reduce((total, policy) => total + policy.policiesSold, 0),
-    color: policyTypeColors[type],
+function PolicyAnalytics({
+  salesByType,
+  topPolicies: top,
+}: Pick<PolicyCatalog, "salesByType" | "topPolicies">) {
+  const typeData = salesByType.map((item) => ({
+    name: item.type,
+    sold: item.sold,
+    color: policyTypeColors[item.type],
   }));
   const totalSold = typeData.reduce((total, item) => total + item.sold, 0);
-  const topPolicies = [...policies]
-    .sort((a, b) => b.policiesSold - a.policiesSold)
-    .slice(0, 5)
-    .map((policy) => ({
-      name: policy.name,
-      sold: policy.policiesSold,
-      color: policyTypeColors[policy.type],
-    }));
+  const topPolicies = top.map((policy) => ({
+    name: policy.name,
+    sold: policy.sold,
+    color: policyTypeColors[policy.type],
+  }));
 
   return (
     <section aria-label="Policy analytics" className="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -494,9 +486,10 @@ function PolicyFormModal({
   initial: PolicyFormData;
   existingCodes: string[];
   onClose: () => void;
-  onSubmit: (data: PolicyFormData) => void;
+  onSubmit: (data: PolicyFormData) => void | Promise<void>;
 }) {
   const [form, setForm] = useState(initial);
+  const [saving, setSaving] = useState(false);
   const setField = <K extends keyof PolicyFormData>(key: K, value: PolicyFormData[K]) =>
     setForm((previous) => ({ ...previous, [key]: value }));
   const setHealth = <K extends keyof HealthFormData>(key: K, value: HealthFormData[K]) =>
@@ -504,8 +497,9 @@ function PolicyFormModal({
   const setMotor = <K extends keyof MotorPolicyDetails>(key: K, value: MotorPolicyDetails[K]) =>
     setForm((previous) => ({ ...previous, motor: { ...previous.motor, [key]: value } }));
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
     const code = form.code.trim().toUpperCase();
     if (existingCodes.includes(code)) {
       toast.error(`Policy code ${code} is already in use.`);
@@ -515,7 +509,12 @@ function PolicyFormModal({
       toast.error("Coverage amount and premium must be greater than zero.");
       return;
     }
-    onSubmit(form);
+    setSaving(true);
+    try {
+      await onSubmit(form);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const fieldClass = "mt-1 h-10 rounded-xl";
@@ -818,7 +817,9 @@ function PolicyFormModal({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">{mode === "add" ? "Create Policy" : "Save Changes"}</Button>
+            <Button type="submit" disabled={saving}>
+              {mode === "add" ? "Create Policy" : "Save Changes"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -1080,7 +1081,6 @@ function PolicyExportMenu({
 function AdminPoliciesPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [policies, setPolicies] = useState<PolicyProduct[]>(policyProductsList);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"All" | PolicyInsuranceType>("All");
   const [statusFilter, setStatusFilter] = useState<"All" | PolicyProductStatus>("All");
@@ -1092,29 +1092,25 @@ function AdminPoliciesPage() {
   const [deletePolicy, setDeletePolicy] = useState<PolicyProduct | null>(null);
   const pageSize = 10;
 
-  const viewPolicy = policies.find((policy) => policy.id === viewPolicyId) ?? null;
+  // Demo data, or the backend API when VITE_API_BASE_URL is set (filtering then
+  // happens in the database).
+  const catalog = usePolicyCatalog({
+    search,
+    type: typeFilter,
+    status: statusFilter,
+    premiumRangeId: premiumFilter,
+    page,
+    pageSize,
+  });
 
-  const filteredPolicies = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    const range = premiumRanges.find((item) => item.id === premiumFilter) ?? premiumRanges[0];
-    return policies.filter((policy) => {
-      const matchesSearch =
-        !query ||
-        policy.name.toLocaleLowerCase().includes(query) ||
-        policy.code.toLocaleLowerCase().includes(query);
-      const matchesType = typeFilter === "All" || policy.type === typeFilter;
-      const matchesStatus = statusFilter === "All" || policy.status === statusFilter;
-      const matchesPremium = !range || (policy.premium >= range.min && policy.premium <= range.max);
-      return matchesSearch && matchesType && matchesStatus && matchesPremium;
-    });
-  }, [policies, search, typeFilter, statusFilter, premiumFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredPolicies.length / pageSize));
+  const totalPages = catalog.totalPages;
   const currentPage = Math.min(page, totalPages);
-  const visiblePolicies = filteredPolicies.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
+  useEffect(() => {
+    if (!catalog.isLoading && page > catalog.totalPages) setPage(catalog.totalPages);
+  }, [page, catalog.totalPages, catalog.isLoading]);
+
+  const visiblePolicies = catalog.rows;
+  const viewPolicy = visiblePolicies.find((policy) => policy.id === viewPolicyId) ?? null;
   const isFiltered = Boolean(
     search || typeFilter !== "All" || statusFilter !== "All" || premiumFilter !== "all",
   );
@@ -1127,73 +1123,66 @@ function AdminPoliciesPage() {
     setPage(1);
   };
 
-  const nextPolicyId = () => {
-    const highest = policies.reduce(
-      (max, policy) => Math.max(max, Number(policy.id.replace("PRD-", "")) || 0),
-      0,
-    );
-    return `PRD-${String(highest + 1).padStart(3, "0")}`;
+  const showError = (error: unknown) =>
+    toast.error(error instanceof Error ? error.message : "Something went wrong.");
+
+  const addPolicy = async (data: PolicyFormData) => {
+    const draft = fromPolicyForm(data, { id: "", policiesSold: 0 });
+    try {
+      const created = await catalog.create(draft);
+      setPage(1);
+      setAddOpen(false);
+      toast.success(`${created.name} added to the policy catalog.`);
+    } catch (error) {
+      showError(error);
+    }
   };
 
-  const addPolicy = (data: PolicyFormData) => {
-    const created = fromPolicyForm(data, { id: nextPolicyId(), policiesSold: 0 });
-    setPolicies((previous) => [created, ...previous]);
-    setPage(1);
-    setAddOpen(false);
-    toast.success(`${created.name} added to the policy catalog.`);
-  };
-
-  const updatePolicy = (data: PolicyFormData) => {
+  const updatePolicy = async (data: PolicyFormData) => {
     if (!editPolicy) return;
-    const updated = fromPolicyForm(data, editPolicy);
-    setPolicies((previous) =>
-      previous.map((policy) => (policy.id === updated.id ? updated : policy)),
-    );
-    setEditPolicy(null);
-    toast.success(`${updated.name} updated.`);
+    try {
+      const updated = await catalog.update(fromPolicyForm(data, editPolicy));
+      setEditPolicy(null);
+      toast.success(`${updated.name} updated.`);
+    } catch (error) {
+      showError(error);
+    }
   };
 
-  const duplicatePolicy = (source: PolicyProduct) => {
-    const codes = new Set(policies.map((policy) => policy.code));
-    let code = `${source.code}-COPY`;
-    for (let suffix = 2; codes.has(code); suffix += 1) code = `${source.code}-COPY${suffix}`;
-    const copy: PolicyProduct = {
-      ...source,
-      id: nextPolicyId(),
-      code,
-      name: `${source.name} (Copy)`,
-      benefits: [...source.benefits],
-      status: "Inactive",
-      policiesSold: 0,
-      lastUpdated: todayIso(),
-    };
-    setPolicies((previous) => {
-      const index = previous.findIndex((policy) => policy.id === source.id);
-      return [...previous.slice(0, index + 1), copy, ...previous.slice(index + 1)];
-    });
-    toast.success(`Duplicated as ${copy.code}. The copy is inactive until you review it.`);
+  const duplicatePolicy = async (source: PolicyProduct) => {
+    try {
+      const copy = await catalog.duplicate(source);
+      toast.success(`Duplicated as ${copy.code}. The copy is inactive until you review it.`);
+    } catch (error) {
+      showError(error);
+    }
   };
 
-  const toggleStatus = (target: PolicyProduct) => {
+  const toggleStatus = async (target: PolicyProduct) => {
     const status: PolicyProductStatus = target.status === "Active" ? "Inactive" : "Active";
-    setPolicies((previous) =>
-      previous.map((policy) =>
-        policy.id === target.id ? { ...policy, status, lastUpdated: todayIso() } : policy,
-      ),
-    );
-    toast.success(
-      status === "Active"
-        ? `${target.name} is now available to agents.`
-        : `${target.name} is now hidden from agents.`,
-    );
+    try {
+      await catalog.setStatus(target, status);
+      toast.success(
+        status === "Active"
+          ? `${target.name} is now available to agents.`
+          : `${target.name} is now hidden from agents.`,
+      );
+    } catch (error) {
+      showError(error);
+    }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deletePolicy) return;
-    setPolicies((previous) => previous.filter((policy) => policy.id !== deletePolicy.id));
-    if (viewPolicyId === deletePolicy.id) setViewPolicyId(null);
-    toast.success(`${deletePolicy.name} was removed from the policy catalog.`);
+    const target = deletePolicy;
     setDeletePolicy(null);
+    try {
+      await catalog.remove(target);
+      if (viewPolicyId === target.id) setViewPolicyId(null);
+      toast.success(`${target.name} was removed from the policy catalog.`);
+    } catch (error) {
+      showError(error);
+    }
   };
 
   const openEdit = (policy: PolicyProduct) => {
@@ -1215,8 +1204,14 @@ function AdminPoliciesPage() {
     onDelete: () => setDeletePolicy(policy),
   });
 
-  const firstShown = filteredPolicies.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const lastShown = Math.min(currentPage * pageSize, filteredPolicies.length);
+  const filteredTotal = catalog.filteredTotal;
+  const firstShown = filteredTotal === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const lastShown = Math.min(currentPage * pageSize, filteredTotal);
+  const tableNotice = catalog.error
+    ? catalog.error
+    : catalog.isLoading
+      ? "Loading policies…"
+      : "No policies match these filters.";
 
   return (
     <div className="min-h-screen bg-surface/30 text-foreground selection:bg-primary/20 selection:text-primary">
@@ -1281,12 +1276,12 @@ function AdminPoliciesPage() {
               </div>
               <PolicyExportMenu
                 scopes={[
-                  { label: "All Policies", count: policies.length },
+                  { label: "All Policies", count: catalog.kpis.total },
                   {
                     label: "Active Policies",
-                    count: policies.filter((policy) => policy.status === "Active").length,
+                    count: catalog.kpis.active,
                   },
-                  { label: "Filtered Policies", count: filteredPolicies.length },
+                  { label: "Filtered Policies", count: filteredTotal },
                 ]}
                 onExport={handleExport}
               />
@@ -1303,7 +1298,7 @@ function AdminPoliciesPage() {
             </div>
           </div>
 
-          <PolicyKpiCards policies={policies} />
+          <PolicyKpiCards kpis={catalog.kpis} />
 
           <section
             aria-label="Policy filters"
@@ -1379,8 +1374,7 @@ function AdminPoliciesPage() {
               <div>
                 <h2 className="font-display text-base font-bold">Policy Catalog</h2>
                 <p className="text-xs text-muted-foreground">
-                  {filteredPolicies.length} {filteredPolicies.length === 1 ? "policy" : "policies"}{" "}
-                  found
+                  {filteredTotal} {filteredTotal === 1 ? "policy" : "policies"} found
                 </p>
               </div>
               <p className="text-[11px] text-muted-foreground">
@@ -1457,7 +1451,18 @@ function AdminPoliciesPage() {
                     <tr>
                       <td colSpan={10} className="py-14 text-center text-sm text-muted-foreground">
                         <Shield className="mx-auto mb-3 size-9 opacity-30" />
-                        No policies match these filters.
+                        {tableNotice}
+                        {catalog.error && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={catalog.retry}
+                            className="ml-3 h-8 rounded-lg"
+                          >
+                            Retry
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -1513,14 +1518,14 @@ function AdminPoliciesPage() {
               ))}
               {visiblePolicies.length === 0 && (
                 <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  No policies match these filters.
+                  {tableNotice}
                 </div>
               )}
             </div>
 
             <div className="flex flex-col gap-3 border-t border-border/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <p className="text-xs text-muted-foreground">
-                Showing {firstShown}–{lastShown} of {filteredPolicies.length} policies
+                Showing {firstShown}–{lastShown} of {filteredTotal} policies
               </p>
               <nav
                 aria-label="Policy pagination"
@@ -1567,7 +1572,7 @@ function AdminPoliciesPage() {
             </div>
           </section>
 
-          <PolicyAnalytics policies={policies} />
+          <PolicyAnalytics salesByType={catalog.salesByType} topPolicies={catalog.topPolicies} />
         </main>
       </div>
 
@@ -1577,7 +1582,7 @@ function AdminPoliciesPage() {
           key="new-policy"
           mode="add"
           initial={emptyPolicyForm}
-          existingCodes={policies.map((policy) => policy.code)}
+          existingCodes={catalog.existingCodes}
           onClose={() => setAddOpen(false)}
           onSubmit={addPolicy}
         />
@@ -1587,9 +1592,7 @@ function AdminPoliciesPage() {
           key={editPolicy.id}
           mode="edit"
           initial={toPolicyForm(editPolicy)}
-          existingCodes={policies
-            .filter((policy) => policy.id !== editPolicy.id)
-            .map((policy) => policy.code)}
+          existingCodes={catalog.existingCodes.filter((code) => code !== editPolicy.code)}
           onClose={() => setEditPolicy(null)}
           onSubmit={updatePolicy}
         />
@@ -1611,9 +1614,9 @@ function AdminPoliciesPage() {
             <AlertDialogTitle>Delete policy?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove {deletePolicy?.name ?? "this policy"}
-              {deletePolicy ? ` (${deletePolicy.code})` : ""} from the local policy catalog.
-              Policies already sold are not affected. To stop new sales without deleting, deactivate
-              the policy instead.
+              {deletePolicy ? ` (${deletePolicy.code})` : ""} from the{" "}
+              {catalog.source === "demo" ? "local " : ""}policy catalog. Policies already sold are
+              not affected. To stop new sales without deleting, deactivate the policy instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

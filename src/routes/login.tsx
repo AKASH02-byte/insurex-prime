@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { signInWithPopup } from "firebase/auth";
 import { exchangeFirebaseIdentity, getAdminSession } from "@/lib/admin-auth";
+import { authApi, isApiConfigured } from "@/lib/api";
 import { signOutFromGoogle } from "@/lib/firebase-client";
 import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 
@@ -148,6 +149,15 @@ function LoginPage() {
       console.log(email);
       const idToken = await result.user.getIdToken();
       await exchangeFirebaseIdentity({ data: { idToken } });
+      if (isApiConfigured) {
+        // Best effort: register the sign-in with the backend API. Login itself must
+        // not depend on it, so failures are reported but do not block navigation.
+        await authApi.verify().catch((error: unknown) => {
+          toast.warning("Signed in, but the InsureX API could not verify this account.", {
+            description: error instanceof Error ? error.message : undefined,
+          });
+        });
+      }
       toast.success(`Signed in as ${email}.`);
       await navigate({ to: "/admin/dashboard" });
     } catch (error) {

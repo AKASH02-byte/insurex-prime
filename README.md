@@ -18,10 +18,12 @@ Output: Generate the clean, semantic HTML and CSS/JS required to build this.
 Build ONLY the first page of a modern insurance management web application.
 PROJECT:
 Create a premium, professional insurance website for a company that handles:
+
 1. Health Insurance
 2. Motor/Car Insurance
-This is the public landing/home page. Do NOT build the admin dashboard, agent dashboard, database, or backend yet. Only prepare the landing page and navigation structure.
-DESIGN STYLE:
+   This is the public landing/home page. Do NOT build the admin dashboard, agent dashboard, database, or backend yet. Only prepare the landing page and navigation structure.
+   DESIGN STYLE:
+
 - Modern SaaS / fintech / insurance dashboard aesthetic
 - Clean, premium, trustworthy and professional
 - Minimal but visually rich
@@ -33,101 +35,103 @@ DESIGN STYLE:
 - Fully responsive for desktop, tablet and mobile
 - Use a professional font such as Inter
 - Avoid excessive gradients, excessive animations or childish illustrations
-TOP NAVIGATION:
-Create a sticky navigation bar.
-Left:
+  TOP NAVIGATION:
+  Create a sticky navigation bar.
+  Left:
 - Professional insurance company logo/icon
 - Company name: "InsureX"
-Center navigation:
+  Center navigation:
 - Home
 - Insurance
 - About
 - Contact
-Right:
+  Right:
 - A prominent button labeled "Admin / Agent Login"
 - Small "Get Started" button
-The "Admin / Agent Login" button should navigate to:
-"/login"
-HERO SECTION:
-Large headline:
-"Insurance Made Simple, Secure & Reliable"
-Supporting text:
-"Manage health and motor insurance policies with a secure, streamlined platform built for customers, agents and administrators."
-Two buttons:
+  The "Admin / Agent Login" button should navigate to:
+  "/login"
+  HERO SECTION:
+  Large headline:
+  "Insurance Made Simple, Secure & Reliable"
+  Supporting text:
+  "Manage health and motor insurance policies with a secure, streamlined platform built for customers, agents and administrators."
+  Two buttons:
 - "Explore Insurance"
 - "Admin / Agent Login"
-Hero visual on the right:
-Create a modern insurance-themed visual/card showing:
+  Hero visual on the right:
+  Create a modern insurance-themed visual/card showing:
 - Health insurance card
 - Car insurance card
 - Policy protection icon
 - Small floating status indicators such as "Active Policy", "Secure", "Verified"
-Do not use fake statistics that imply real company data.
-INSURANCE SECTION:
-Heading:
-"Insurance Plans for Every Need"
-Create two large premium cards.
-CARD 1:
-Health Insurance
+  Do not use fake statistics that imply real company data.
+  INSURANCE SECTION:
+  Heading:
+  "Insurance Plans for Every Need"
+  Create two large premium cards.
+  CARD 1:
+  Health Insurance
 - Medical protection
 - Family coverage
 - Flexible plans
 - Secure policy management
-Button: "Explore Health Insurance"
-CARD 2:
-Motor Insurance
+  Button: "Explore Health Insurance"
+  CARD 2:
+  Motor Insurance
 - Car protection
 - Comprehensive coverage
 - Easy policy management
 - Fast renewal
-Button: "Explore Motor Insurance"
-TRUST SECTION:
-Heading:
-"Built for Simple & Secure Policy Management"
-Show 3 or 4 feature cards:
+  Button: "Explore Motor Insurance"
+  TRUST SECTION:
+  Heading:
+  "Built for Simple & Secure Policy Management"
+  Show 3 or 4 feature cards:
 - Secure Policy Management
 - Easy Claims & Renewals
 - Trusted Agents
 - Centralized Records
-HOW IT WORKS:
-Create a simple 3-step section:
+  HOW IT WORKS:
+  Create a simple 3-step section:
+
 1. Choose Insurance
 2. Connect With an Agent
 3. Manage Your Policy
-CTA SECTION:
-Create a dark premium section near the bottom.
-Heading:
-"Ready to Manage Your Insurance?"
-Text:
-"Access your insurance services through our secure platform."
-Buttons:
+   CTA SECTION:
+   Create a dark premium section near the bottom.
+   Heading:
+   "Ready to Manage Your Insurance?"
+   Text:
+   "Access your insurance services through our secure platform."
+   Buttons:
+
 - "Get Started"
 - "Admin / Agent Login"
-FOOTER:
-Include:
-InsureX logo/name
-Short company description
-Quick Links
-Insurance
-About
-Contact
-Login
-Add:
-"© 2026 InsureX. All rights reserved."
-IMPORTANT FUNCTIONALITY:
+  FOOTER:
+  Include:
+  InsureX logo/name
+  Short company description
+  Quick Links
+  Insurance
+  About
+  Contact
+  Login
+  Add:
+  "© 2026 InsureX. All rights reserved."
+  IMPORTANT FUNCTIONALITY:
 - "Admin / Agent Login" buttons must navigate to /login
 - Navigation links should work
 - Buttons should have hover states
 - Responsive navigation with mobile menu
 - Use semantic HTML and accessible buttons
 - Keep component structure clean and ready for future expansion
-IMPORTANT:
-This is ONLY PAGE 1.
-Do not create the dashboard yet.
-Do not create authentication logic yet.
-Do not create database tables yet.
-Do not add unnecessary pages.
-Focus on making this landing page look highly polished and production-ready.
+  IMPORTANT:
+  This is ONLY PAGE 1.
+  Do not create the dashboard yet.
+  Do not create authentication logic yet.
+  Do not create database tables yet.
+  Do not add unnecessary pages.
+  Focus on making this landing page look highly polished and production-ready.
 
 This project was built with [Lovable](https://lovable.dev).
 
@@ -151,3 +155,17 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+---
+
+## Development: backend API
+
+The REST API (Fastify + PostgreSQL + Prisma, Firebase token auth) lives in
+[`backend/`](backend/README.md) and is deployed separately from this frontend.
+
+- The frontend talks to it only when `VITE_API_BASE_URL` is set (e.g.
+  `http://localhost:4000`). Without it, admin pages use the built-in demo data.
+- API calls send the signed-in user's Firebase ID token as `Authorization: Bearer …`.
+  Client code lives in `src/lib/api/`.
+- Currently backed by the API: Policies page (list, filters, CRUD, analytics),
+  dashboard KPI cards, and a best-effort `/auth/verify` after Google sign-in.
