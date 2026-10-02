@@ -9,6 +9,8 @@ export interface AgentFull {
   avatar: string;
   email: string;
   phone: string;
+  /** Default password while unchanged; null once the agent chose their own. Super Admin view only. */
+  password?: string | null;
   address: string;
   city: string;
   state: string;

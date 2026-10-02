@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -51,6 +52,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { requireAdminSession } from "@/lib/admin-route-guard";
+import { useAdminAgents, useAdminCustomers } from "@/hooks/use-admin-live-data";
+import { adminKeys } from "@/lib/admin-queries";
+import { ApiError, customersApi, isApiConfigured } from "@/lib/api";
+import { toCustomerInput } from "@/lib/api/admin-mappers";
 import {
   agentFilterOptions,
   customerKpiData,
@@ -60,6 +65,8 @@ import {
   type CustomerStatus,
   type InsuranceType,
 } from "@/components/admin/customers-mock-data";
+
+const NO_CUSTOMERS: Customer[] = [];
 
 export const Route = createFileRoute("/admin/customers")({
   beforeLoad: requireAdminSession,
@@ -71,6 +78,8 @@ export const Route = createFileRoute("/admin/customers")({
   }),
   component: AdminCustomersPage,
 });
+
+type AgentOption = { code: string; name: string; id?: string };
 
 type CustomerFormData = Pick<
   Customer,
@@ -231,13 +240,15 @@ function CustomerStatusBadge({ status }: { status: CustomerStatus }) {
 function CustomerFormModal({
   mode,
   initial,
+  agentOptions,
   onClose,
   onSubmit,
 }: {
   mode: "add" | "edit";
   initial: CustomerFormData;
+  agentOptions: AgentOption[];
   onClose: () => void;
-  onSubmit: (data: CustomerFormData) => void;
+  onSubmit: (data: CustomerFormData) => void | Promise<void>;
 }) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
@@ -253,15 +264,18 @@ function CustomerFormModal({
     );
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (form.insuranceTypes.length === 0) {
       toast.error("Select at least one insurance type.");
       return;
     }
     setSaving(true);
-    onSubmit(form);
-    setSaving(false);
+    try {
+      await onSubmit(form);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const fieldClass = "mt-1 h-10 rounded-xl";
@@ -400,9 +414,7 @@ function CustomerFormModal({
                 className={`w-full border border-input bg-background px-3 text-sm ${fieldClass}`}
                 value={form.agentCode}
                 onChange={(event) => {
-                  const agent = agentFilterOptions.find(
-                    (option) => option.code === event.target.value,
-                  );
+                  const agent = agentOptions.find((option) => option.code === event.target.value);
                   setForm((previous) => ({
                     ...previous,
                     agentCode: agent?.code ?? "",
@@ -411,7 +423,7 @@ function CustomerFormModal({
                 }}
               >
                 <option value="">Unassigned</option>
-                {agentFilterOptions.map((agent) => (
+                {agentOptions.map((agent) => (
                   <option key={agent.code} value={agent.code}>
                     {agent.name} ({agent.code})
                   </option>
@@ -604,7 +616,43 @@ function CustomerDetailsDialog({
 function AdminCustomersPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>(customersFullList);
+  const queryClient = useQueryClient();
+  const live = useAdminCustomers();
+  const liveAgents = useAdminAgents();
+  const [localCustomers, setCustomers] = useState<Customer[]>(customersFullList);
+  // Backend rows are keyed by customer code for display; writes need the record ids.
+  const customerIds = useMemo(
+    () => new Map(live.customers.data?.data.map((row) => [row.customerCode, row.id])),
+    [live.customers.data],
+  );
+  const customers: Customer[] = isApiConfigured ? (live.rows ?? NO_CUSTOMERS) : localCustomers;
+  const agentOptions: AgentOption[] = useMemo(
+    () =>
+      isApiConfigured
+        ? (liveAgents.data?.data ?? []).map((agent) => ({
+            id: agent.id,
+            code: agent.agentCode,
+            name: agent.fullName,
+          }))
+        : agentFilterOptions,
+    [liveAgents.data],
+  );
+  const refreshCustomers = () =>
+    queryClient.invalidateQueries({ queryKey: adminKeys.customersAll });
+  const saveCustomer = useMutation({
+    mutationFn: ({ id, data }: { id?: string; data: CustomerFormData }) => {
+      const agentId = agentOptions.find((option) => option.code === data.agentCode)?.id ?? null;
+      const input = toCustomerInput(data, agentId);
+      return id ? customersApi.update(id, input) : customersApi.create(input);
+    },
+    onSuccess: refreshCustomers,
+  });
+  const removeCustomer = useMutation({
+    mutationFn: (id: string) => customersApi.remove(id),
+    onSuccess: refreshCustomers,
+  });
+  const errorMessage = (error: unknown) =>
+    error instanceof ApiError ? error.message : "Something went wrong. Please try again.";
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"All" | InsuranceType>("All");
   const [statusFilter, setStatusFilter] = useState<"All" | CustomerStatus>("All");
@@ -651,7 +699,18 @@ function AdminCustomersPage() {
     setPage(1);
   };
 
-  const addCustomer = (data: CustomerFormData) => {
+  const addCustomer = async (data: CustomerFormData) => {
+    if (isApiConfigured) {
+      try {
+        const created = await saveCustomer.mutateAsync({ data });
+        setPage(1);
+        setAddOpen(false);
+        toast.success(`${created.fullName} added to customers.`);
+      } catch (error) {
+        toast.error(errorMessage(error));
+      }
+      return;
+    }
     const nextNumber =
       customers.reduce(
         (max, customer) => Math.max(max, Number(customer.id.replace("CUS-", "")) || 1000),
@@ -676,8 +735,21 @@ function AdminCustomersPage() {
     toast.success(`${newCustomer.name} added to customers.`);
   };
 
-  const updateCustomer = (data: CustomerFormData) => {
+  const updateCustomer = async (data: CustomerFormData) => {
     if (!editCustomer) return;
+    if (isApiConfigured) {
+      const id = customerIds.get(editCustomer.id);
+      if (!id) return;
+      try {
+        await saveCustomer.mutateAsync({ id, data });
+        setViewState(null);
+        setEditCustomer(null);
+        toast.success("Customer profile updated.");
+      } catch (error) {
+        toast.error(errorMessage(error));
+      }
+      return;
+    }
     const updated = {
       ...editCustomer,
       ...data,
@@ -698,8 +770,20 @@ function AdminCustomersPage() {
     toast.success("Customer profile updated.");
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteCustomer) return;
+    if (isApiConfigured) {
+      const id = customerIds.get(deleteCustomer.id);
+      if (!id) return;
+      try {
+        await removeCustomer.mutateAsync(id);
+        toast.success(`${deleteCustomer.name} was removed from the customer directory.`);
+        setDeleteCustomer(null);
+      } catch (error) {
+        toast.error(errorMessage(error));
+      }
+      return;
+    }
     setCustomers((previous) => previous.filter((customer) => customer.id !== deleteCustomer.id));
     toast.success(`${deleteCustomer.name} was removed from the customer directory.`);
     setDeleteCustomer(null);
@@ -846,7 +930,7 @@ function AdminCustomersPage() {
                   className="h-9 rounded-xl border border-border bg-surface/50 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="All">Agent: All</option>
-                  {agentFilterOptions.map((agent) => (
+                  {agentOptions.map((agent) => (
                     <option key={agent.code} value={agent.code}>
                       {agent.name}
                     </option>
@@ -1116,6 +1200,7 @@ function AdminCustomersPage() {
           key="new-customer"
           mode="add"
           initial={emptyCustomerForm}
+          agentOptions={agentOptions}
           onClose={() => setAddOpen(false)}
           onSubmit={addCustomer}
         />
@@ -1125,6 +1210,7 @@ function AdminCustomersPage() {
           key={editCustomer.id}
           mode="edit"
           initial={toCustomerForm(editCustomer)}
+          agentOptions={agentOptions}
           onClose={() => setEditCustomer(null)}
           onSubmit={updateCustomer}
         />

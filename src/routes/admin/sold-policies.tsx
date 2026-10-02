@@ -4,6 +4,9 @@ import { AdminHeader } from "@/components/admin/AdminHeader";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminRecentSalesTable } from "@/components/admin/AdminRecentSalesTable";
 import { useState } from "react";
+import { isApiConfigured } from "@/lib/api";
+import { useAdminSoldPolicies } from "@/hooks/use-admin-live-data";
+import { recentPolicySalesList } from "@/components/admin/admin-mock-data";
 import { requireAdminSession } from "@/lib/admin-route-guard";
 
 export const Route = createFileRoute("/admin/sold-policies")({
@@ -16,6 +19,7 @@ export const Route = createFileRoute("/admin/sold-policies")({
 
 function AdminSoldPoliciesPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { query, sales } = useAdminSoldPolicies({ limit: 50, sortBy: "createdAt", order: "desc" });
 
   return (
     <div className="min-h-screen bg-surface/30 text-foreground">
@@ -44,7 +48,14 @@ function AdminSoldPoliciesPage() {
             </p>
           </div>
 
-          <AdminRecentSalesTable />
+          {isApiConfigured && query.isError ? (
+            <p role="alert" className="text-sm text-destructive">
+              Couldn't load sold policies. Retrying automatically.
+            </p>
+          ) : null}
+          <AdminRecentSalesTable
+            policies={isApiConfigured ? (sales ?? []) : recentPolicySalesList}
+          />
         </main>
       </div>
     </div>

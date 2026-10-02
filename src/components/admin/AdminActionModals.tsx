@@ -1,5 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  AgentCredentialsDialog,
+  type AgentCredentials,
+} from "@/components/admin/AgentCredentialsDialog";
+import { adminKeys } from "@/lib/admin-queries";
+import { agentsApi, isApiConfigured } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,12 +31,49 @@ export interface AdminActionModalsProps {
 export function AdminActionModals({ modalType, onClose, onSuccess }: AdminActionModalsProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [credentials, setCredentials] = useState<AgentCredentials | null>(null);
+  const queryClient = useQueryClient();
 
-  if (!modalType) return null;
+  // Stays mounted after the form closes so the one-time credentials remain visible.
+  if (!modalType) {
+    return (
+      <AgentCredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />
+    );
+  }
 
-  const handleSubmit = (e: FormEvent) => {
+  const createAgent = async () => {
+    const created = await agentsApi.create({
+      fullName: (formData["agentName"] ?? "").trim(),
+      email: (formData["agentEmail"] ?? "").trim(),
+      phone: (formData["agentPhone"] ?? "").trim(),
+      ...(formData["agentCode"]?.trim() ? { agentCode: formData["agentCode"].trim() } : {}),
+    });
+    void queryClient.invalidateQueries({ queryKey: adminKeys.agents });
+    setCredentials({
+      name: created.fullName,
+      agentCode: created.agentCode,
+      phone: created.phone,
+      password: created.temporaryPassword,
+    });
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    // Live mode: Add Agent hits the API, which generates the default login credentials.
+    if (modalType === "add_agent" && isApiConfigured) {
+      try {
+        await createAgent();
+        setFormData({});
+        onSuccess?.();
+        onClose();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not create the agent.");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     setTimeout(() => {
       setIsSubmitting(false);
@@ -58,7 +102,8 @@ export function AdminActionModals({ modalType, onClose, onSuccess }: AdminAction
       case "add_agent":
         return {
           title: "Onboard New Agent",
-          description: "Register a certified insurance agent and grant portal credentials",
+          description:
+            "Login ID is the Agent ID or phone; the default password is generated automatically (first 5 letters of the first name @ phone)",
           fields: [
             {
               id: "agentName",
@@ -73,7 +118,19 @@ export function AdminActionModals({ modalType, onClose, onSuccess }: AdminAction
               type: "email",
               required: true,
             },
-            { id: "agentCode", label: "Agent Code", placeholder: "e.g. AGT-06", required: true },
+            {
+              id: "agentPhone",
+              label: "Phone Number",
+              placeholder: "e.g. 9876543210",
+              type: "tel",
+              required: true,
+            },
+            {
+              id: "agentCode",
+              label: "Agent ID (optional)",
+              placeholder: "Auto-generated if left empty",
+              required: false,
+            },
             {
               id: "region",
               label: "Assigned Region / Territory",

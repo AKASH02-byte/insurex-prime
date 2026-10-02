@@ -26,9 +26,9 @@ const loginBodySchema = z.object({
   identifier: z
     .string()
     .trim()
-    .min(1, "Enter your agent code or email.")
+    .min(1, "Enter your agent code, phone number or email.")
     .max(254)
-    .describe("Agent code (e.g. AGT-DEMO1) or the agent's account email"),
+    .describe("Agent code (e.g. AGT-DEMO1), registered phone number, or the agent's account email"),
   password: z.string().min(1, "Enter your password.").max(128),
 });
 
@@ -45,7 +45,7 @@ const changePasswordBodySchema = z.object({
 });
 
 const invalidCredentials = () =>
-  new AppError(401, "INVALID_CREDENTIALS", "Incorrect agent code/email or password.");
+  new AppError(401, "INVALID_CREDENTIALS", "Incorrect agent code, phone, email or password.");
 
 /**
  * Agent password sign-in. Sessions are HttpOnly cookies (see agent-session.ts);
@@ -61,7 +61,7 @@ export const agentLoginRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         tags: ["Auth"],
-        summary: "Agent sign-in with agent code or email + password",
+        summary: "Agent sign-in with agent code, phone or email + password",
         description:
           "Sets an HttpOnly session cookie. Unknown accounts and wrong passwords both return 401 INVALID_CREDENTIALS; inactive or suspended agents return 403 ACCOUNT_DISABLED (only after the password is verified). When `user.mustChangePassword` is true, every endpoint except `/auth/me`, `/auth/agent/change-password` and `/auth/agent/logout` returns 403 PASSWORD_CHANGE_REQUIRED. Five failures in 15 minutes lock the identifier for that client (429).",
         body: loginBodySchema,

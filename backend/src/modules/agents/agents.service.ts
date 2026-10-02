@@ -12,7 +12,7 @@ import { buildMeta, toDateFilter, toSkipTake } from "../../utils/pagination.js";
 import { containsInsensitive } from "../../utils/search.js";
 import { changedFields, recordAudit } from "../audit-logs/audit-logs.service.js";
 import { revokeUserSessions } from "../auth/agent-session.js";
-import { generateTemporaryPassword, hashPassword } from "../auth/password.js";
+import { generateDefaultAgentPassword, hashPassword, normalizePhone } from "../auth/password.js";
 import {
   toAgentDto,
   type AgentWithUser,
@@ -22,7 +22,7 @@ import {
 } from "./agents.schemas.js";
 
 const agentInclude = {
-  user: { select: { email: true } },
+  user: { select: { email: true, mustChangePassword: true } },
   _count: { select: { customers: true, soldPolicies: true } },
 } as const;
 
@@ -57,7 +57,14 @@ export async function listAgents(db: Database, query: z.infer<typeof listAgentsQ
       ...toSkipTake(query),
     }),
   ]);
-  return { items: agents.map(toAgentWithStats), meta: buildMeta(query.page, query.limit, total) };
+  const items = agents.map((agent) => ({
+    ...toAgentWithStats(agent),
+    // Only an unchanged default password is known; once the agent picks their own it is hash-only.
+    initialPassword: agent.user.mustChangePassword
+      ? generateDefaultAgentPassword(agent.fullName, agent.phone)
+      : null,
+  }));
+  return { items, meta: buildMeta(query.page, query.limit, total) };
 }
 
 /** Super Admins can read any agent; agents can read only themselves. */
@@ -85,8 +92,14 @@ export async function createAgent(
     throw conflict(`Agent code ${body.agentCode} is already in use.`);
   }
 
+  // Phone numbers double as a login ID, so they must identify exactly one agent.
+  const phone = normalizePhone(body.phone);
+  if (await db.agent.findFirst({ where: { phone }, select: { id: true } })) {
+    throw conflict("An agent with this phone number already exists.");
+  }
+
   // The Super Admin hands this to the agent; only its hash is stored.
-  const temporaryPassword = generateTemporaryPassword();
+  const temporaryPassword = generateDefaultAgentPassword(body.fullName, phone);
   const passwordHash = await hashPassword(temporaryPassword);
 
   const agent = await withGeneratedCode(
@@ -97,11 +110,11 @@ export async function createAgent(
           data: {
             agentCode,
             fullName: body.fullName,
-            phone: body.phone,
+            phone,
             address: body.address ?? null,
             status: body.status,
             ...(body.joinedAt ? { joinedAt: parseDateOnly(body.joinedAt) } : {}),
-            // Signs in with agent code or email + the temporary password, then picks their own.
+            // Signs in with agent code, phone or email + the default password, then picks their own.
             user: {
               create: { email: body.email, role: "AGENT", passwordHash, mustChangePassword: true },
             },
@@ -121,12 +134,15 @@ export async function createAgent(
   return { ...toAgentWithStats(agent), temporaryPassword };
 }
 
-/** Issues a new temporary password and signs the agent out everywhere. */
+/** Resets to the default password and signs the agent out everywhere. */
 export async function resetAgentPassword(db: Database, request: FastifyRequest, id: string) {
-  const agent = await db.agent.findUnique({ where: { id }, select: { userId: true } });
+  const agent = await db.agent.findUnique({
+    where: { id },
+    select: { userId: true, fullName: true, phone: true },
+  });
   if (!agent) throw notFound("Agent");
 
-  const temporaryPassword = generateTemporaryPassword();
+  const temporaryPassword = generateDefaultAgentPassword(agent.fullName, agent.phone);
   const passwordHash = await hashPassword(temporaryPassword);
   await db.$transaction(async (tx) => {
     await tx.user.update({
@@ -160,12 +176,37 @@ export async function updateAgent(
     }
   }
 
+  const phone = body.phone === undefined ? undefined : normalizePhone(body.phone);
+  if (phone !== undefined && phone !== existing.phone) {
+    if (await db.agent.findFirst({ where: { phone, NOT: { id } }, select: { id: true } })) {
+      throw conflict("An agent with this phone number already exists.");
+    }
+  }
+
+  // While the agent is still on the default password, keep it in step with their name/phone.
+  const identityChanged =
+    (body.fullName !== undefined && body.fullName !== existing.fullName) ||
+    (phone !== undefined && phone !== existing.phone);
+  const rehash = identityChanged && existing.user.mustChangePassword;
+  const newDefaultHash = rehash
+    ? await hashPassword(
+        generateDefaultAgentPassword(body.fullName ?? existing.fullName, phone ?? existing.phone),
+      )
+    : undefined;
+
   const agent = await db.$transaction(async (tx) => {
+    if (newDefaultHash) {
+      await tx.user.update({
+        where: { id: existing.userId },
+        data: { passwordHash: newDefaultHash },
+      });
+      await revokeUserSessions(tx, existing.userId);
+    }
     const updated = await tx.agent.update({
       where: { id },
       data: {
         ...(body.fullName !== undefined ? { fullName: body.fullName } : {}),
-        ...(body.phone !== undefined ? { phone: body.phone } : {}),
+        ...(phone !== undefined ? { phone } : {}),
         ...(body.address !== undefined ? { address: body.address } : {}),
         ...(body.agentCode !== undefined ? { agentCode: body.agentCode } : {}),
         ...(body.joinedAt !== undefined ? { joinedAt: parseDateOnly(body.joinedAt) } : {}),

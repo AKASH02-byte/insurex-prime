@@ -10,6 +10,7 @@ import { parseDateOnly, toDateOnly, toNumber } from "../../utils/format.js";
 import { buildMeta, toDateFilter, toSkipTake } from "../../utils/pagination.js";
 import { containsInsensitive } from "../../utils/search.js";
 import { changedFields, recordAudit } from "../audit-logs/audit-logs.service.js";
+import { getSettingValues } from "../settings/settings.service.js";
 import type {
   createSoldPolicyBodySchema,
   listSoldPoliciesQuerySchema,
@@ -234,11 +235,17 @@ export async function createSoldPolicy(
   request: FastifyRequest,
   body: z.infer<typeof createSoldPolicyBodySchema>,
 ) {
+  const settings = await getSettingValues(db);
+  // Enforced here, not in the UI: a disabled switch must stop direct API calls too.
+  if (auth.role === "AGENT" && !settings["policy.allowAgentSales"]) {
+    throw forbidden("Recording new policy sales is currently disabled for agents.");
+  }
   const { policy, customer, agentId, premium, issueDate, expiryDate } = await resolveSale(
     db,
     auth,
     body,
   );
+  const paidAtSale = Boolean(body.paymentMethod) || body.paymentStatus === "PAID";
   const year = issueDate.getUTCFullYear();
   const receiptYear = new Date().getUTCFullYear();
 
@@ -256,11 +263,12 @@ export async function createSoldPolicy(
             issueDate,
             expiryDate,
             // Paid in full at the point of sale: the policy is in force straight away.
-            ...(body.paymentMethod || body.paymentStatus === "PAID"
+            ...(paidAtSale
               ? { paymentStatus: "PAID", policyStatus: "ACTIVE" }
-              : body.paymentStatus
-                ? { paymentStatus: body.paymentStatus }
-                : {}),
+              : {
+                  paymentStatus: body.paymentStatus ?? settings["policy.defaultPaymentStatus"],
+                  policyStatus: settings["policy.defaultPolicyStatus"],
+                }),
           },
         });
         let receiptNumber: string | undefined;

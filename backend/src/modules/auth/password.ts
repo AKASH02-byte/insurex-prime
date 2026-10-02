@@ -74,3 +74,18 @@ export const newPasswordSchema = z
   .regex(/[A-Za-z]/, "must contain a letter")
   .regex(/\d/, "must contain a number")
   .refine((value) => value.trim() === value, "must not start or end with spaces");
+
+/** Digits only, so "98765 43210" and "9876543210" are the same phone number. */
+export const normalizePhone = (phone: string) => phone.replace(/\D/g, "");
+
+/**
+ * Default password for a newly created agent: the first 5 letters of the first name,
+ * "@", then the phone number — e.g. "Rajesh Verma" + "9876543210" -> "Rajes@9876543210".
+ * It is predictable by design (the Super Admin hands it over), so agents are always
+ * forced to replace it on first sign-in via `mustChangePassword`.
+ */
+export function generateDefaultAgentPassword(fullName: string, phone: string): string {
+  const firstName = fullName.trim().split(/\s+/)[0] ?? "";
+  const prefix = firstName.replace(/[^\p{L}]/gu, "").slice(0, 5) || "Agent";
+  return `${prefix}@${normalizePhone(phone)}`;
+}

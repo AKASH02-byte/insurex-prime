@@ -40,6 +40,6 @@ export async function createTestApp(): Promise<{ app: App; db: Database }> {
 
 export async function resetDatabase(db: Database) {
   await db.$executeRawUnsafe(
-    'TRUNCATE TABLE "receipts", "sold_policies", "customers", "agents", "policies", "audit_logs", "users" CASCADE',
+    'TRUNCATE TABLE "receipts", "sold_policies", "customers", "agents", "policies", "audit_logs", "system_settings", "users" CASCADE',
   );
 }

@@ -1,6 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 import {
   BarChart3,
   FileCheck2,
@@ -17,8 +15,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { endAdminSession } from "@/lib/admin-auth";
-import { signOutFromGoogle } from "@/lib/firebase-client";
+import { useAdminSignOut } from "@/hooks/use-admin-sign-out";
 
 export interface AdminSidebarProps {
   currentPath?: string;
@@ -33,21 +30,7 @@ export function AdminSidebar({
   onClose,
   onOpenExport,
 }: AdminSidebarProps) {
-  const navigate = useNavigate();
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
-    try {
-      await endAdminSession();
-      await signOutFromGoogle().catch(() => undefined);
-      await navigate({ to: "/login" });
-    } catch {
-      toast.error("Unable to end your session. Please try again.");
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
+  const { signOut: handleLogout, isSigningOut: isLoggingOut } = useAdminSignOut();
 
   const navItems = [
     { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },

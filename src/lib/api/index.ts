@@ -8,10 +8,12 @@ export {
 export type { ListParams, Paginated, PaginationMeta } from "./client";
 export { agentApi, type AgentProfileInput } from "./agent";
 export { agentsApi, type AgentInput } from "./agents";
-export { agentAuthApi, authApi, type AgentLoginResult } from "./auth";
+export { adminAuthApi, agentAuthApi, authApi, type AgentLoginResult } from "./auth";
 export { customersApi, type CustomerInput, type CustomerListParams } from "./customers";
 export { dashboardApi, reportsApi } from "./dashboard";
 export { policiesApi, type PolicyListParams } from "./policies";
 export { receiptsApi, type ReceiptListParams } from "./receipts";
+export { settingsApi } from "./settings";
 export { soldPoliciesApi, type SalePolicyInput, type SoldPolicyListParams } from "./sold-policies";
+export type * from "./settings";
 export type * from "./types";

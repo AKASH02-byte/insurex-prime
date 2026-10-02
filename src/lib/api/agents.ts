@@ -1,5 +1,5 @@
 import { apiRequest, apiRequestPaginated, toQuery, type ListParams } from "./client";
-import type { AgentStatus, ApiAgent } from "./types";
+import type { AgentStatus, ApiAgent, ApiAgentListItem } from "./types";
 
 export interface AgentInput {
   fullName: string;
@@ -14,7 +14,7 @@ export interface AgentInput {
 /** Agent management (SUPER_ADMIN). */
 export const agentsApi = {
   list: (params?: ListParams & { status?: AgentStatus }) =>
-    apiRequestPaginated<ApiAgent>("/agents", { query: toQuery(params) }),
+    apiRequestPaginated<ApiAgentListItem>("/agents", { query: toQuery(params) }),
   get: (id: string) => apiRequest<ApiAgent>(`/agents/${id}`),
   /** The response carries the agent's temporary password — show it once, never store it. */
   create: (input: AgentInput) =>
