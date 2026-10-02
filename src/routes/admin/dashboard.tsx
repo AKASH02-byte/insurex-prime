@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { requireAdminSession } from "@/lib/admin-route-guard";
 import { useMemo, useState } from "react";
@@ -21,6 +22,7 @@ import {
   type KpiStats,
   type RecentPolicySale,
 } from "@/components/admin/admin-mock-data";
+import { dashboardApi, isApiConfigured, type DashboardSummary } from "@/lib/api";
 
 export const Route = createFileRoute("/admin/dashboard")({
   beforeLoad: requireAdminSession,
@@ -36,6 +38,24 @@ export const Route = createFileRoute("/admin/dashboard")({
   }),
   component: SuperAdminDashboard,
 });
+
+const LIVE_LABEL = "Live";
+
+/** Maps the backend summary onto the existing KPI cards (no growth data yet). */
+function toKpiStats(summary: DashboardSummary | undefined, label: string): KpiStats {
+  return {
+    totalPolicies: summary?.totalPolicies ?? 0,
+    policiesSold: summary?.policiesSold ?? 0,
+    activePolicies: summary?.activeSoldPolicies ?? 0,
+    totalPremium: summary?.totalPremium ?? 0,
+    totalAgents: summary?.totalAgents ?? 0,
+    policiesGrowth: label,
+    soldGrowth: label,
+    activeGrowth: label,
+    premiumGrowth: label,
+    agentsGrowth: label,
+  };
+}
 
 function SuperAdminDashboard() {
   // Mobile sidebar state
@@ -172,6 +192,19 @@ function SuperAdminDashboard() {
     return initialKpiData;
   }, [filters.policyType, filters.agent]);
 
+  // With VITE_API_BASE_URL set, KPI cards show real backend figures.
+  const liveSummary = useQuery({
+    queryKey: ["dashboard", "summary"],
+    queryFn: () => dashboardApi.summary(),
+    enabled: isApiConfigured && typeof window !== "undefined",
+  });
+  const kpiStats: KpiStats = isApiConfigured
+    ? toKpiStats(
+        liveSummary.data,
+        liveSummary.error ? "Unavailable" : liveSummary.data ? LIVE_LABEL : "Loading…",
+      )
+    : dynamicKpiStats;
+
   return (
     <div className="min-h-screen bg-surface/30 text-foreground selection:bg-primary/20 selection:text-primary">
       <Toaster position="top-right" richColors />
@@ -204,7 +237,7 @@ function SuperAdminDashboard() {
           />
 
           {/* KPI Summary Cards */}
-          <AdminKpiCards stats={dynamicKpiStats} />
+          <AdminKpiCards stats={kpiStats} />
 
           {/* Analytics Charts (Sales Overview & Distribution) */}
           <AdminAnalyticsCharts
