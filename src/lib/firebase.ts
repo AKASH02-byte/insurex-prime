@@ -1,13 +1,17 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
+// Publishable Firebase web config. Environment variables take precedence;
+// the literals are safe fallbacks (this config is public by design).
 const firebaseConfig = {
-  apiKey: import.meta.env["VITE_FIREBASE_API_KEY"],
-  authDomain: import.meta.env["VITE_FIREBASE_AUTH_DOMAIN"],
-  projectId: import.meta.env["VITE_FIREBASE_PROJECT_ID"],
-  storageBucket: import.meta.env["VITE_FIREBASE_STORAGE_BUCKET"],
-  messagingSenderId: import.meta.env["VITE_FIREBASE_MESSAGING_SENDER_ID"],
-  appId: import.meta.env["VITE_FIREBASE_APP_ID"],
+  apiKey: import.meta.env["VITE_FIREBASE_API_KEY"] ?? "AIzaSyDo5TIAxPmyGhPYOtRA5hRIr0Oc5vLzKPg",
+  authDomain: import.meta.env["VITE_FIREBASE_AUTH_DOMAIN"] ?? "insurex-2.firebaseapp.com",
+  projectId: import.meta.env["VITE_FIREBASE_PROJECT_ID"] ?? "insurex-2",
+  storageBucket:
+    import.meta.env["VITE_FIREBASE_STORAGE_BUCKET"] ?? "insurex-2.firebasestorage.app",
+  messagingSenderId: import.meta.env["VITE_FIREBASE_MESSAGING_SENDER_ID"] ?? "310812229075",
+  appId:
+    import.meta.env["VITE_FIREBASE_APP_ID"] ?? "1:310812229075:web:30c43c6d1a0accd9508326",
 };
 
 if (Object.values(firebaseConfig).some((value) => !value)) {
