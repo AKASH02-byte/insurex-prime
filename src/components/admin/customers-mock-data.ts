@@ -10,20 +10,20 @@ export interface CustomerPolicy {
   type: InsuranceType;
   policyName: string;
   premium: number;
-  issueDate: string;   // "DD MMM YYYY"
-  expiryDate: string;  // "DD MMM YYYY"
+  issueDate: string; // "DD MMM YYYY"
+  expiryDate: string; // "DD MMM YYYY"
   agentName: string;
   agentCode: string;
   status: PolicyStatus;
 }
 
 export interface Customer {
-  id: string;          // "CUS-1001"
+  id: string; // "CUS-1001"
   name: string;
-  avatar: string;      // 2-char initials
+  avatar: string; // 2-char initials
   phone: string;
   email: string;
-  dob: string;         // "DD MMM YYYY"
+  dob: string; // "DD MMM YYYY"
   gender: "Male" | "Female" | "Other";
   address: string;
   city: string;
@@ -35,7 +35,7 @@ export interface Customer {
   agentName: string;
   agentCode: string;
   status: CustomerStatus;
-  dateAdded: string;   // ISO "YYYY-MM-DD"
+  dateAdded: string; // ISO "YYYY-MM-DD"
   lastUpdated: string; // "DD MMM YYYY"
 }
 
@@ -79,8 +79,28 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Spouse",
     insuranceTypes: ["Health"],
     policies: [
-      P("POL-10021", "Health", "Health Gold", 15000, "26 Sep 2026", "25 Sep 2027", "Rajesh Verma", "AGT-01", "Active"),
-      P("POL-10005", "Health", "Critical Care 360", 12000, "10 Jan 2026", "09 Jan 2027", "Rajesh Verma", "AGT-01", "Active"),
+      P(
+        "POL-10021",
+        "Health",
+        "Health Gold",
+        15000,
+        "26 Sep 2026",
+        "25 Sep 2027",
+        "Rajesh Verma",
+        "AGT-01",
+        "Active",
+      ),
+      P(
+        "POL-10005",
+        "Health",
+        "Critical Care 360",
+        12000,
+        "10 Jan 2026",
+        "09 Jan 2027",
+        "Rajesh Verma",
+        "AGT-01",
+        "Active",
+      ),
     ],
     agentName: "Rajesh Verma",
     agentCode: "AGT-01",
@@ -103,7 +123,17 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Spouse",
     insuranceTypes: ["Motor"],
     policies: [
-      P("POL-10020", "Motor", "Car Comprehensive", 9500, "26 Sep 2026", "25 Sep 2027", "Priya Sharma", "AGT-02", "Active"),
+      P(
+        "POL-10020",
+        "Motor",
+        "Car Comprehensive",
+        9500,
+        "26 Sep 2026",
+        "25 Sep 2027",
+        "Priya Sharma",
+        "AGT-02",
+        "Active",
+      ),
     ],
     agentName: "Priya Sharma",
     agentCode: "AGT-02",
@@ -126,7 +156,17 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Spouse",
     insuranceTypes: ["Health"],
     policies: [
-      P("POL-10019", "Health", "Family Floater Plus", 22500, "25 Sep 2026", "24 Sep 2027", "Amit Kumar", "AGT-03", "Active"),
+      P(
+        "POL-10019",
+        "Health",
+        "Family Floater Plus",
+        22500,
+        "25 Sep 2026",
+        "24 Sep 2027",
+        "Amit Kumar",
+        "AGT-03",
+        "Active",
+      ),
     ],
     agentName: "Amit Kumar",
     agentCode: "AGT-03",
@@ -149,7 +189,17 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Mother",
     insuranceTypes: ["Motor"],
     policies: [
-      P("POL-10018", "Motor", "Two-Wheeler Protect", 4200, "25 Sep 2026", "24 Sep 2027", "Rajesh Verma", "AGT-01", "Active"),
+      P(
+        "POL-10018",
+        "Motor",
+        "Two-Wheeler Protect",
+        4200,
+        "25 Sep 2026",
+        "24 Sep 2027",
+        "Rajesh Verma",
+        "AGT-01",
+        "Active",
+      ),
     ],
     agentName: "Rajesh Verma",
     agentCode: "AGT-01",
@@ -172,7 +222,17 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Father",
     insuranceTypes: ["Health"],
     policies: [
-      P("POL-10017", "Health", "Critical Care 360", 18000, "24 Sep 2026", "23 Sep 2027", "Sneha Patel", "AGT-04", "Pending"),
+      P(
+        "POL-10017",
+        "Health",
+        "Critical Care 360",
+        18000,
+        "24 Sep 2026",
+        "23 Sep 2027",
+        "Sneha Patel",
+        "AGT-04",
+        "Pending",
+      ),
     ],
     agentName: "Sneha Patel",
     agentCode: "AGT-04",
@@ -195,7 +255,17 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Spouse",
     insuranceTypes: ["Motor"],
     policies: [
-      P("POL-10016", "Motor", "Commercial Fleet Shield", 45000, "24 Sep 2026", "23 Sep 2027", "Priya Sharma", "AGT-02", "Active"),
+      P(
+        "POL-10016",
+        "Motor",
+        "Commercial Fleet Shield",
+        45000,
+        "24 Sep 2026",
+        "23 Sep 2027",
+        "Priya Sharma",
+        "AGT-02",
+        "Active",
+      ),
     ],
     agentName: "Priya Sharma",
     agentCode: "AGT-02",
@@ -218,7 +288,17 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Son",
     insuranceTypes: ["Health"],
     policies: [
-      P("POL-10015", "Health", "Senior Citizen Care", 28000, "23 Sep 2026", "22 Sep 2027", "Amit Kumar", "AGT-03", "Pending"),
+      P(
+        "POL-10015",
+        "Health",
+        "Senior Citizen Care",
+        28000,
+        "23 Sep 2026",
+        "22 Sep 2027",
+        "Amit Kumar",
+        "AGT-03",
+        "Pending",
+      ),
     ],
     agentName: "Amit Kumar",
     agentCode: "AGT-03",
@@ -241,8 +321,28 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Spouse",
     insuranceTypes: ["Health", "Motor"],
     policies: [
-      P("POL-10014", "Health", "Health Gold Plus", 20000, "20 Sep 2026", "19 Sep 2027", "Sunita Reddy", "AGT-10", "Active"),
-      P("POL-10013", "Motor", "Car Comprehensive", 9800, "18 Sep 2026", "17 Sep 2027", "Sunita Reddy", "AGT-10", "Active"),
+      P(
+        "POL-10014",
+        "Health",
+        "Health Gold Plus",
+        20000,
+        "20 Sep 2026",
+        "19 Sep 2027",
+        "Sunita Reddy",
+        "AGT-10",
+        "Active",
+      ),
+      P(
+        "POL-10013",
+        "Motor",
+        "Car Comprehensive",
+        9800,
+        "18 Sep 2026",
+        "17 Sep 2027",
+        "Sunita Reddy",
+        "AGT-10",
+        "Active",
+      ),
     ],
     agentName: "Sunita Reddy",
     agentCode: "AGT-10",
@@ -265,8 +365,28 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Spouse",
     insuranceTypes: ["Health"],
     policies: [
-      P("POL-10012", "Health", "Family Floater Plus", 25000, "15 Sep 2026", "14 Sep 2027", "Meenakshi Pillai", "AGT-08", "Active"),
-      P("POL-10003", "Health", "Critical Care 360", 14000, "01 Mar 2025", "28 Feb 2026", "Meenakshi Pillai", "AGT-08", "Expired"),
+      P(
+        "POL-10012",
+        "Health",
+        "Family Floater Plus",
+        25000,
+        "15 Sep 2026",
+        "14 Sep 2027",
+        "Meenakshi Pillai",
+        "AGT-08",
+        "Active",
+      ),
+      P(
+        "POL-10003",
+        "Health",
+        "Critical Care 360",
+        14000,
+        "01 Mar 2025",
+        "28 Feb 2026",
+        "Meenakshi Pillai",
+        "AGT-08",
+        "Expired",
+      ),
     ],
     agentName: "Meenakshi Pillai",
     agentCode: "AGT-08",
@@ -289,7 +409,17 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Mother",
     insuranceTypes: ["Motor"],
     policies: [
-      P("POL-10011", "Motor", "Two-Wheeler Protect", 3800, "10 Sep 2026", "09 Sep 2027", "Vikram Malhotra", "AGT-05", "Active"),
+      P(
+        "POL-10011",
+        "Motor",
+        "Two-Wheeler Protect",
+        3800,
+        "10 Sep 2026",
+        "09 Sep 2027",
+        "Vikram Malhotra",
+        "AGT-05",
+        "Active",
+      ),
     ],
     agentName: "Vikram Malhotra",
     agentCode: "AGT-05",
@@ -312,8 +442,28 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Spouse",
     insuranceTypes: ["Health", "Other"],
     policies: [
-      P("POL-10010", "Health", "Health Silver", 10500, "05 Sep 2026", "04 Sep 2027", "Divya Nair", "AGT-06", "Active"),
-      P("POL-10009", "Other", "Term Life Basic", 8200, "01 Feb 2025", "31 Jan 2026", "Divya Nair", "AGT-06", "Expired"),
+      P(
+        "POL-10010",
+        "Health",
+        "Health Silver",
+        10500,
+        "05 Sep 2026",
+        "04 Sep 2027",
+        "Divya Nair",
+        "AGT-06",
+        "Active",
+      ),
+      P(
+        "POL-10009",
+        "Other",
+        "Term Life Basic",
+        8200,
+        "01 Feb 2025",
+        "31 Jan 2026",
+        "Divya Nair",
+        "AGT-06",
+        "Expired",
+      ),
     ],
     agentName: "Divya Nair",
     agentCode: "AGT-06",
@@ -336,7 +486,17 @@ export const customersFullList: Customer[] = [
     nomineeRelation: "Spouse",
     insuranceTypes: ["Health"],
     policies: [
-      P("POL-10028", "Health", "Health Gold Plus", 32000, "01 Sep 2026", "31 Aug 2027", "Meenakshi Pillai", "AGT-08", "Active"),
+      P(
+        "POL-10028",
+        "Health",
+        "Health Gold Plus",
+        32000,
+        "01 Sep 2026",
+        "31 Aug 2027",
+        "Meenakshi Pillai",
+        "AGT-08",
+        "Active",
+      ),
     ],
     agentName: "Meenakshi Pillai",
     agentCode: "AGT-08",
