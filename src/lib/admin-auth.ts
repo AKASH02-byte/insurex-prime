@@ -68,6 +68,14 @@ export const exchangeFirebaseIdentity = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const apiKey = process.env.FIREBASE_API_KEY ?? process.env.VITE_FIREBASE_API_KEY;
     const config = getSessionConfig();
+    const sessionSecret = process.env.AUTH_SESSION_SECRET;
+
+    // Safe diagnostics: presence/length only, never values.
+    console.info("[admin-auth] config check", {
+      firebaseApiKeyPresent: Boolean(apiKey),
+      authSessionSecretPresent: Boolean(sessionSecret),
+      authSessionSecretLengthOk: Boolean(sessionSecret && sessionSecret.length >= 32),
+    });
 
     if (!apiKey || !config) {
       throw new Error("Google sign-in is not configured on this server.");
