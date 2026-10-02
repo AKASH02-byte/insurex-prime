@@ -1,39 +1,31 @@
-// import { initializeApp, getApps, getApp } from "firebase/app";
-// import { getAuth, GoogleAuthProvider } from "firebase/auth";
-
-// const firebaseConfig = {
-//   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-//   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-//   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-//   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-//   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-//   appId: import.meta.env.VITE_FIREBASE_APP_ID,
-// };
-
-// if (Object.values(firebaseConfig).some((value) => !value)) {
-//   throw new Error("Firebase web configuration is missing from the environment.");
-// }
-
-// const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-
-// export const auth = getAuth(app);
-// export const googleProvider = new GoogleAuthProvider();
-// googleProvider.setCustomParameters({ prompt: "select_account" });
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDo5TIAxPmyGhPYOtRA5hRIr0Oc5vLzKPg",
-  authDomain: "insurex-2.firebaseapp.com",
-  projectId: "insurex-2",
-  storageBucket: "insurex-2.firebasestorage.app",
-  messagingSenderId: "310812229075",
-  appId: "1:310812229075:web:30c43c6d1a0accd9508326"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase only if it hasn't been initialized yet
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const isFirebaseClientConfigured = Object.values(firebaseConfig).every(Boolean);
 
-export const auth = getAuth(app);
+let auth: Auth | undefined;
+
+// Initialized lazily so a missing VITE_FIREBASE_* variable surfaces as a sign-in error
+// instead of crashing the /login page on import.
+export function getFirebaseAuth() {
+  if (!isFirebaseClientConfigured) {
+    throw new Error("Google sign-in is unavailable: the Firebase web app is not configured.");
+  }
+  if (!auth) {
+    const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    auth = getAuth(app);
+  }
+  return auth;
+}
+
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });

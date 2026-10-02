@@ -35,7 +35,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { signInWithPopup } from "firebase/auth";
 import { exchangeFirebaseIdentity, getAdminSession } from "@/lib/admin-auth";
 import { signOutFromGoogle } from "@/lib/firebase-client";
-import { auth, googleProvider } from "@/lib/firebase";
+import { getFirebaseAuth, googleProvider } from "@/lib/firebase";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: async () => {
@@ -143,7 +143,7 @@ function LoginPage() {
     setGoogleError("");
     setIsGoogleLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(getFirebaseAuth(), googleProvider);
       const email = result.user.email;
       console.log(email);
       const idToken = await result.user.getIdToken();

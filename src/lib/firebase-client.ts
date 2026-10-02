@@ -1,11 +1,12 @@
 import { signInWithPopup, signOut } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { getFirebaseAuth, googleProvider, isFirebaseClientConfigured } from "@/lib/firebase";
 
 export async function signInWithGoogle() {
   if (typeof window === "undefined") {
     throw new Error("Google sign-in is only available in a browser.");
   }
 
+  const auth = getFirebaseAuth();
   const result = await signInWithPopup(auth, googleProvider);
   return {
     auth,
@@ -15,6 +16,6 @@ export async function signInWithGoogle() {
 }
 
 export async function signOutFromGoogle() {
-  if (typeof window === "undefined") return;
-  await signOut(auth);
+  if (typeof window === "undefined" || !isFirebaseClientConfigured) return;
+  await signOut(getFirebaseAuth());
 }
