@@ -4,6 +4,7 @@ import { agentRoutes } from "../modules/agents/agents.routes.js";
 import { auditLogRoutes } from "../modules/audit-logs/audit-logs.routes.js";
 import { adminLoginRoutes } from "../modules/auth/admin-login.routes.js";
 import { agentLoginRoutes } from "../modules/auth/agent-login.routes.js";
+import { passwordResetRoutes } from "../modules/auth/password-reset.routes.js";
 import { authRoutes } from "../modules/auth/auth.routes.js";
 import { catalogRoutes } from "../modules/catalog/catalog.routes.js";
 import { customerRoutes } from "../modules/customers/customers.routes.js";
@@ -26,6 +27,7 @@ export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(authRoutes, { prefix: "/auth" });
   await app.register(agentLoginRoutes, { prefix: "/auth/agent" });
   await app.register(adminLoginRoutes, { prefix: "/auth/admin" });
+  await app.register(passwordResetRoutes, { prefix: "/auth/password-reset" });
   await app.register(platformRoutes, { prefix: "/platform" });
   await app.register(catalogRoutes, { prefix: "/catalog" });
   await app.register(agentRoutes, { prefix: "/agents" });

@@ -8,7 +8,8 @@ export function LoginFloatingCards() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 mx-auto hidden max-w-7xl select-none overflow-hidden lg:block"
+      // Starts below the fixed header (pt-4 + h-16 = 5rem) so no card slides under it.
+      className="pointer-events-none absolute inset-x-0 bottom-0 top-24 mx-auto hidden max-w-7xl select-none overflow-hidden lg:block"
     >
       <div className={`${card} left-4 top-12 w-72 xl:left-8`}>
         <div className="mb-2 flex items-center justify-between">

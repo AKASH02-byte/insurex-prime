@@ -15,6 +15,23 @@ export const adminAuthApi = {
     }),
 };
 
+/** Forgot password: an emailed link plus temporary password, applied once the link is confirmed. */
+export const passwordResetApi = {
+  /** Always succeeds for a well-formed request, whether or not an account matches. */
+  request: (identifier: string) =>
+    apiRequest<{ requested: true }>("/auth/password-reset/request", {
+      method: "POST",
+      auth: false,
+      body: { identifier },
+    }),
+  confirm: (token: string) =>
+    apiRequest<{ reset: true }>("/auth/password-reset/confirm", {
+      method: "POST",
+      auth: false,
+      body: { token },
+    }),
+};
+
 export interface AgentLoginResult {
   expiresAt: string;
   user: CurrentUser;

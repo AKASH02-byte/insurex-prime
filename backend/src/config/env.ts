@@ -60,6 +60,17 @@ const envSchema = z
     AGENT_COOKIE_SECURE: z.enum(["true", "false"]).optional(),
     // Optional cookie Domain, e.g. ".example.com" to share it across subdomains.
     AGENT_COOKIE_DOMAIN: optionalString,
+    // Transactional email via Resend's HTTPS API (SMTP ports are blocked on most PaaS hosts).
+    // Without RESEND_API_KEY and RESEND_FROM_EMAIL, forgot-password is reported as unavailable.
+    RESEND_API_KEY: optionalString,
+    RESEND_FROM_EMAIL: optionalString,
+    RESEND_FROM_NAME: z.string().trim().min(1).default("InsuroX Prime"),
+    // Signs password-reset links (HMAC). At least 32 characters; unset disables forgot-password.
+    PASSWORD_RESET_SECRET: optionalString.refine(
+      (value) => value === undefined || value.length >= 32,
+      "must be at least 32 characters",
+    ),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
   })
   .superRefine((env, ctx) => {
     if (Boolean(env.FIREBASE_CLIENT_EMAIL) !== Boolean(env.FIREBASE_PRIVATE_KEY)) {

@@ -11,7 +11,6 @@ import {
   Mail,
   Shield,
   ShieldAlert,
-  ShieldCheck,
   Sparkles,
   User,
   Users,
@@ -38,9 +37,12 @@ import { LoginFloatingCards } from "@/components/auth/LoginFloatingCards";
 import { adminPasswordLogin, getAdminSession } from "@/lib/admin-auth";
 import { forgetAgentSignIn, hasAgentSignInHint } from "@/lib/agent-session";
 import { currentUserKey } from "@/hooks/use-current-user";
-import { adminAuthApi, agentAuthApi, ApiError, isApiConfigured } from "@/lib/api";
+import { adminAuthApi, agentAuthApi, ApiError, isApiConfigured, passwordResetApi } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
+  validateSearch: (raw: Record<string, unknown>): { role?: "agent" | "admin" | undefined } => ({
+    role: raw["role"] === "agent" ? "agent" : raw["role"] === "admin" ? "admin" : undefined,
+  }),
   beforeLoad: async () => {
     if (await getAdminSession()) throw redirect({ to: "/admin/dashboard" });
   },
@@ -70,7 +72,8 @@ function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [role, setRole] = useState<Role>("super_admin");
+  const search = Route.useSearch();
+  const [role, setRole] = useState<Role>(search.role === "agent" ? "agent" : "super_admin");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -195,10 +198,26 @@ function LoginPage() {
     }
   };
 
-  const handleForgotPasswordSubmit = (e: FormEvent) => {
+  const [forgotSending, setForgotSending] = useState(false);
+  const handleForgotPasswordSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setForgotSent(false);
-    setForgotError("Password recovery is unavailable because password sign-in is not configured.");
+    setForgotError("");
+    if (!isApiConfigured) {
+      setForgotError("Password recovery is unavailable because the API is not configured.");
+      return;
+    }
+    setForgotSending(true);
+    try {
+      await passwordResetApi.request(forgotEmail.trim());
+      setForgotSent(true);
+    } catch (error) {
+      setForgotError(
+        error instanceof Error ? error.message : "Could not send the email. Please try again.",
+      );
+    } finally {
+      setForgotSending(false);
+    }
   };
 
   return (
@@ -215,10 +234,14 @@ function LoginPage() {
             href={PUBLIC_SITE_URL}
             className="flex items-center gap-2.5 transition-opacity hover:opacity-90"
           >
-            <span className="grid size-9 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
-              <ShieldCheck className="size-5" />
+            <img src="/insurox-icon.png" alt="" className="size-9 rounded-lg shadow-sm" />
+
+            <span className="flex flex-col leading-none">
+              <span className="font-display text-lg font-extrabold tracking-tight">InsuroX</span>
+              <span className="mt-1 text-[10px] font-medium tracking-wide text-foreground">
+                A Vikaas Infina Product
+              </span>
             </span>
-            <span className="font-display text-lg font-extrabold tracking-tight">InsuroX</span>
             <span className="hidden rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-xs font-semibold text-muted-foreground sm:inline-block">
               Prime Portal
             </span>
@@ -394,7 +417,7 @@ function LoginPage() {
                           type="button"
                           onClick={() => {
                             setForgotSent(false);
-                            setForgotEmail(identifier.includes("@") ? identifier : "");
+                            setForgotEmail(identifier.trim());
                             setForgotPasswordOpen(true);
                           }}
                           className="text-xs font-semibold text-primary transition-colors hover:text-primary/80 hover:underline cursor-pointer"
@@ -503,8 +526,8 @@ function LoginPage() {
               Reset Your Password
             </DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground pt-1">
-              Enter your registered administrative or agent email address to receive password
-              recovery instructions.
+              Enter your registered email or Agent ID. We will email you a reset link and a
+              temporary password.
             </DialogDescription>
           </DialogHeader>
 
@@ -513,11 +536,12 @@ function LoginPage() {
               <div className="mx-auto mb-3 grid size-12 place-items-center rounded-full bg-signal/20 text-foreground">
                 <CheckCircle2 className="size-6 text-foreground" />
               </div>
-              <h4 className="font-bold text-foreground">Reset Link Dispatched</h4>
+              <h4 className="font-bold text-foreground">Check your email</h4>
               <p className="mt-1 text-xs text-muted-foreground">
                 If an account exists for{" "}
                 <span className="font-medium text-foreground">{forgotEmail}</span>, you will receive
-                an email shortly with recovery steps.
+                an email shortly with a reset link and a temporary password. The link expires in 30
+                minutes.
               </p>
               <div className="mt-5">
                 <Button
@@ -536,16 +560,17 @@ function LoginPage() {
                   htmlFor="forgot-email"
                   className="text-xs font-bold uppercase tracking-wider"
                 >
-                  Registered Email
+                  Registered Email or Agent ID
                 </Label>
                 <div className="relative mt-1.5">
                   <Mail className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" />
                   <Input
                     id="forgot-email"
-                    type="email"
+                    type="text"
+                    autoComplete="username"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="Enter your registered email"
+                    placeholder="Email or Agent ID"
                     className="pl-9 h-11 rounded-xl"
                     required
                   />
@@ -563,8 +588,12 @@ function LoginPage() {
                     Cancel
                   </Button>
                 </DialogClose>
-                <Button type="submit" className="rounded-xl bg-primary text-primary-foreground">
-                  Send Recovery Link
+                <Button
+                  type="submit"
+                  disabled={forgotSending}
+                  className="rounded-xl bg-primary text-primary-foreground"
+                >
+                  {forgotSending ? "Sending…" : "Send Recovery Link"}
                 </Button>
               </DialogFooter>
             </form>

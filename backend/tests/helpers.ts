@@ -24,7 +24,9 @@ export const fakeVerifier: TokenVerifier = {
 export const tokenFor = (uid: string, email: string) => `valid|${uid}|${email}`;
 export const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 
-export async function createTestApp(): Promise<{ app: App; db: Database }> {
+export async function createTestApp(
+  extraEnv: Record<string, string> = {},
+): Promise<{ app: App; db: Database }> {
   const env = loadEnv({
     NODE_ENV: "test",
     DATABASE_URL: TEST_DATABASE_URL!,
@@ -32,6 +34,7 @@ export async function createTestApp(): Promise<{ app: App; db: Database }> {
     FRONTEND_URL: "http://localhost:8080",
     SUPER_ADMIN_EMAILS: SUPER_ADMIN_EMAIL,
     DOCS_ENABLED: "true",
+    ...extraEnv,
   });
   // A local PGlite server mixes up concurrent connections, so it can be limited to one.
   const poolMax = Number(process.env.TEST_DATABASE_POOL_MAX) || undefined;

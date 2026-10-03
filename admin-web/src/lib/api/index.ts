@@ -8,7 +8,13 @@ export {
 export type { ListParams, Paginated, PaginationMeta } from "./client";
 export { agentApi, type AgentProfileInput } from "./agent";
 export { agentsApi, type AgentInput } from "./agents";
-export { adminAuthApi, agentAuthApi, authApi, type AgentLoginResult } from "./auth";
+export {
+  adminAuthApi,
+  agentAuthApi,
+  authApi,
+  passwordResetApi,
+  type AgentLoginResult,
+} from "./auth";
 export {
   catalogApi,
   catalogKeys,

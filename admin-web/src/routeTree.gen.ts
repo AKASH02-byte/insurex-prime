@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgentRouteRouteImport } from './routes/agent/route'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AdminAgentsRouteImport } from './routes/admin/agents'
 import { Route as AdminCatalogRouteImport } from './routes/admin/catalog'
 import { Route as AdminChangePasswordRouteImport } from './routes/admin/change-password'
@@ -45,6 +46,11 @@ const AgentRouteRoute = AgentRouteRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminAgentsRoute = AdminAgentsRouteImport.update({
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agent': typeof AgentRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/catalog': typeof AdminCatalogRoute
   '/admin/change-password': typeof AdminChangePasswordRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/catalog': typeof AdminCatalogRoute
   '/admin/change-password': typeof AdminChangePasswordRoute
@@ -195,6 +203,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agent': typeof AgentRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/catalog': typeof AdminCatalogRoute
   '/admin/change-password': typeof AdminChangePasswordRoute
@@ -221,6 +230,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agent'
     | '/login'
+    | '/reset-password'
     | '/admin/agents'
     | '/admin/catalog'
     | '/admin/change-password'
@@ -244,6 +254,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/reset-password'
     | '/admin/agents'
     | '/admin/catalog'
     | '/admin/change-password'
@@ -268,6 +279,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agent'
     | '/login'
+    | '/reset-password'
     | '/admin/agents'
     | '/admin/catalog'
     | '/admin/change-password'
@@ -293,6 +305,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentRouteRoute: typeof AgentRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   AdminAgentsRoute: typeof AdminAgentsRoute
   AdminCatalogRoute: typeof AdminCatalogRoute
   AdminChangePasswordRoute: typeof AdminChangePasswordRoute
@@ -327,6 +340,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/agents': {
@@ -495,6 +515,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentRouteRoute: AgentRouteRouteWithChildren,
   LoginRoute: LoginRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   AdminAgentsRoute: AdminAgentsRoute,
   AdminCatalogRoute: AdminCatalogRoute,
   AdminChangePasswordRoute: AdminChangePasswordRoute,
