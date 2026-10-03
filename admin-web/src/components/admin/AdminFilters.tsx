@@ -16,7 +16,7 @@ import { SelectField } from "@/components/ui/select-field";
 
 export interface FilterState {
   dateRange: "All Time" | "7D" | "30D" | "6M" | "1Y";
-  policyType: "All" | "Health" | "Motor";
+  policyType: "All" | "Health" | "Motor" | "Life" | "Commercial";
   agent: string;
   status: "All" | "Active" | "In Review" | "Expired";
 }
@@ -163,6 +163,8 @@ export function AdminFilters({ filters, onFilterChange, onReset }: AdminFiltersP
                 <option value="All">Type: All Policies</option>
                 <option value="Health">Health Insurance</option>
                 <option value="Motor">Motor Insurance</option>
+                <option value="Life">Life Insurance</option>
+                <option value="Commercial">Commercial Insurance</option>
               </SelectField>
             </div>
 

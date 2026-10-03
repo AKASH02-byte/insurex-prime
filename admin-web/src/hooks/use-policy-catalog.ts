@@ -8,7 +8,7 @@ import {
   type PolicyProductStatus,
 } from "@/components/admin/policies-mock-data";
 import { ApiError, dashboardApi, isApiConfigured, policiesApi, reportsApi } from "@/lib/api";
-import { toPolicyInput, toPolicyProduct } from "@/lib/api/policy-mappers";
+import { toPolicyInput, toPolicyProduct, typeFromApi, typeToApi } from "@/lib/api/policy-mappers";
 
 export interface PolicyCatalogFilters {
   search: string;
@@ -26,6 +26,10 @@ export interface PolicyKpis {
   healthActive: number;
   motor: number;
   motorActive: number;
+  life: number;
+  lifeActive: number;
+  commercial: number;
+  commercialActive: number;
 }
 
 export interface PolicyCatalog {
@@ -105,6 +109,12 @@ function useDemoPolicyCatalog(filters: PolicyCatalogFilters): PolicyCatalog {
       healthActive: count((policy) => policy.type === "Health" && policy.status === "Active"),
       motor: count((policy) => policy.type === "Motor"),
       motorActive: count((policy) => policy.type === "Motor" && policy.status === "Active"),
+      life: count((policy) => policy.type === "Life"),
+      lifeActive: count((policy) => policy.type === "Life" && policy.status === "Active"),
+      commercial: count((policy) => policy.type === "Commercial"),
+      commercialActive: count(
+        (policy) => policy.type === "Commercial" && policy.status === "Active",
+      ),
     },
     salesByType: (["Health", "Motor"] as const).map((type) => ({
       type,
@@ -173,9 +183,7 @@ function useApiPolicyCatalog(filters: PolicyCatalogFilters): PolicyCatalog {
         sortBy: "createdAt",
         order: "desc",
         ...(filters.search.trim() ? { search: filters.search.trim() } : {}),
-        ...(filters.type !== "All"
-          ? { insuranceType: filters.type === "Health" ? "HEALTH" : "MOTOR" }
-          : {}),
+        ...(filters.type !== "All" ? { insuranceType: typeToApi[filters.type] } : {}),
         ...(filters.status !== "All"
           ? { status: filters.status === "Active" ? "ACTIVE" : "INACTIVE" }
           : {}),
@@ -190,15 +198,41 @@ function useApiPolicyCatalog(filters: PolicyCatalogFilters): PolicyCatalog {
     queryFn: async (): Promise<PolicyKpis> => {
       const total = (params: Parameters<typeof policiesApi.list>[0]) =>
         policiesApi.list({ ...params, limit: 1 }).then((result) => result.meta.total);
-      const [all, active, health, healthActive, motor, motorActive] = await Promise.all([
+      const [
+        all,
+        active,
+        health,
+        healthActive,
+        motor,
+        motorActive,
+        life,
+        lifeActive,
+        commercial,
+        commercialActive,
+      ] = await Promise.all([
         total({}),
         total({ status: "ACTIVE" }),
         total({ insuranceType: "HEALTH" }),
         total({ insuranceType: "HEALTH", status: "ACTIVE" }),
         total({ insuranceType: "MOTOR" }),
         total({ insuranceType: "MOTOR", status: "ACTIVE" }),
+        total({ insuranceType: "LIFE" }),
+        total({ insuranceType: "LIFE", status: "ACTIVE" }),
+        total({ insuranceType: "COMMERCIAL" }),
+        total({ insuranceType: "COMMERCIAL", status: "ACTIVE" }),
       ]);
-      return { total: all, active, health, healthActive, motor, motorActive };
+      return {
+        total: all,
+        active,
+        health,
+        healthActive,
+        motor,
+        motorActive,
+        life,
+        lifeActive,
+        commercial,
+        commercialActive,
+      };
     },
   });
 
@@ -212,12 +246,12 @@ function useApiPolicyCatalog(filters: PolicyCatalogFilters): PolicyCatalog {
       ]);
       return {
         salesByType: distribution.map((row) => ({
-          type: (row.insuranceType === "HEALTH" ? "Health" : "Motor") as PolicyInsuranceType,
+          type: typeFromApi[row.insuranceType],
           sold: row.policiesSold,
         })),
         topPolicies: top.data.map((row) => ({
           name: row.policyName,
-          type: (row.insuranceType === "HEALTH" ? "Health" : "Motor") as PolicyInsuranceType,
+          type: typeFromApi[row.insuranceType],
           sold: row.policiesSold,
         })),
       };
@@ -247,6 +281,10 @@ function useApiPolicyCatalog(filters: PolicyCatalogFilters): PolicyCatalog {
       healthActive: 0,
       motor: 0,
       motorActive: 0,
+      life: 0,
+      lifeActive: 0,
+      commercial: 0,
+      commercialActive: 0,
     },
     salesByType: analytics.data?.salesByType ?? [
       { type: "Health", sold: 0 },

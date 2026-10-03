@@ -436,17 +436,19 @@ function CustomerFormModal({
             <fieldset className="sm:col-span-2">
               <legend className="mb-2 text-sm font-medium">Insurance types</legend>
               <div className="flex flex-wrap gap-4">
-                {(["Health", "Motor", "Other"] as InsuranceType[]).map((type) => (
-                  <label key={type} className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.insuranceTypes.includes(type)}
-                      onChange={() => toggleInsuranceType(type)}
-                      className="size-4 accent-primary"
-                    />
-                    {type}
-                  </label>
-                ))}
+                {(["Health", "Motor", "Life", "Commercial", "Other"] as InsuranceType[]).map(
+                  (type) => (
+                    <label key={type} className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={form.insuranceTypes.includes(type)}
+                        onChange={() => toggleInsuranceType(type)}
+                        className="size-4 accent-primary"
+                      />
+                      {type}
+                    </label>
+                  ),
+                )}
               </div>
             </fieldset>
           </div>
@@ -860,6 +862,8 @@ function AdminCustomersPage() {
                   <option value="All">Insurance: All types</option>
                   <option value="Health">Health</option>
                   <option value="Motor">Motor</option>
+                  <option value="Life">Life</option>
+                  <option value="Commercial">Commercial</option>
                   <option value="Other">Other</option>
                 </SelectField>
                 <SelectField

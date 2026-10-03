@@ -4,6 +4,7 @@ import { Loader2, ServerOff, ShieldAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppFooter } from "@/components/AppFooter";
+import { currentUserKey } from "@/hooks/use-current-user";
 import { AgentHeader } from "@/components/agent/AgentHeader";
 import { AgentSidebar } from "@/components/agent/AgentSidebar";
 import { ErrorState } from "@/components/agent/agent-ui";
@@ -79,6 +80,8 @@ function AgentLayout() {
       if (message) toast.error(message);
       await navigate({ to: "/login", replace: true });
       queryClient.removeQueries({ queryKey: agentKeys.all });
+      // The admin route guard reads this key; a later admin sign-in must not see this user.
+      queryClient.removeQueries({ queryKey: currentUserKey });
       endingRef.current = false;
     },
     [navigate, queryClient],

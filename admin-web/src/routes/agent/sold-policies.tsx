@@ -129,6 +129,8 @@ function SoldPoliciesPage() {
             <option value="">All types</option>
             <option value="HEALTH">Health</option>
             <option value="MOTOR">Motor</option>
+            <option value="LIFE">Life</option>
+            <option value="COMMERCIAL">Commercial</option>
           </NativeSelect>
           <Input
             type="date"

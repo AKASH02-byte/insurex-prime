@@ -1,6 +1,7 @@
 import type {
   HealthPolicyDetails,
   MotorCoverageType,
+  PolicyInsuranceType,
   PolicyProduct,
   PremiumFrequency,
   VehicleType,
@@ -76,6 +77,8 @@ export function toPolicyProduct(policy: ApiPolicy): PolicyProduct {
           };
     return { ...base, type: "Health", health };
   }
+  if (policy.insuranceType === "LIFE") return { ...base, type: "Life" };
+  if (policy.insuranceType === "COMMERCIAL") return { ...base, type: "Commercial" };
   return {
     ...base,
     type: "Motor",
@@ -98,11 +101,18 @@ export function toPolicyProduct(policy: ApiPolicy): PolicyProduct {
   };
 }
 
+export const typeToApi = {
+  Health: "HEALTH",
+  Motor: "MOTOR",
+  Life: "LIFE",
+  Commercial: "COMMERCIAL",
+} as const satisfies Record<PolicyInsuranceType, ApiPolicy["insuranceType"]>;
+
 export function toPolicyInput(product: PolicyProduct): PolicyInput {
   return {
     policyCode: product.code,
     policyName: product.name,
-    insuranceType: product.type === "Health" ? "HEALTH" : "MOTOR",
+    insuranceType: typeToApi[product.type],
     description: product.description,
     coverageAmount: product.coverageAmount,
     premium: product.premium,
@@ -122,13 +132,23 @@ export function toPolicyInput(product: PolicyProduct): PolicyInput {
             waitingPeriod: product.health.waitingPeriod,
             ageEligibility: product.health.ageEligibility,
           }
-        : {
-            kind: "MOTOR",
-            vehicleType: vehicleToApi[product.motor.vehicleType],
-            coverageType: coverageToApi[product.motor.coverageType],
-            ownDamage: product.motor.ownDamage,
-            thirdPartyCoverage: product.motor.thirdPartyCoverage,
-            vehicleEligibility: product.motor.vehicleEligibility,
-          },
+        : product.type === "Motor"
+          ? {
+              kind: "MOTOR",
+              vehicleType: vehicleToApi[product.motor.vehicleType],
+              coverageType: coverageToApi[product.motor.coverageType],
+              ownDamage: product.motor.ownDamage,
+              thirdPartyCoverage: product.motor.thirdPartyCoverage,
+              vehicleEligibility: product.motor.vehicleEligibility,
+            }
+          : null,
   };
 }
+
+/** API insurance type -> the label the policies screens use. */
+export const typeFromApi = {
+  HEALTH: "Health",
+  MOTOR: "Motor",
+  LIFE: "Life",
+  COMMERCIAL: "Commercial",
+} as const satisfies Record<ApiPolicy["insuranceType"], PolicyInsuranceType>;

@@ -158,6 +158,8 @@ function AgentCustomersPage() {
               <option value="">Any policy type</option>
               <option value="HEALTH">Holds Health</option>
               <option value="MOTOR">Holds Motor</option>
+              <option value="LIFE">Holds Life</option>
+              <option value="COMMERCIAL">Holds Commercial</option>
             </NativeSelect>
           </div>
         </div>

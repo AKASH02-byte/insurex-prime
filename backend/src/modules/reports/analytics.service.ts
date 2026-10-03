@@ -218,7 +218,10 @@ export async function getPolicyDistribution(
 }
 
 // ─── Portfolio summary ────────────────────────────────────────────────────────
-/** Sold policies per insurance line by status (cancelled excluded), HEALTH and MOTOR always listed. */
+/**
+ * Sold policies per insurance line by status (cancelled excluded). HEALTH and MOTOR are
+ * always listed; LIFE and COMMERCIAL appear once they have sales.
+ */
 export async function getPortfolioSummary(
   db: Database,
   scope: AnalyticsScope,
@@ -236,7 +239,10 @@ export async function getPortfolioSummary(
     JOIN policies p ON p.id = sp."policyId"
     WHERE ${where}
     GROUP BY 1, 2`;
-  return (["HEALTH", "MOTOR"] as const).map((insuranceType) => {
+  const lines = (["HEALTH", "MOTOR", "LIFE", "COMMERCIAL"] as const).filter(
+    (line) => line === "HEALTH" || line === "MOTOR" || rows.some((row) => row.insuranceType === line),
+  );
+  return lines.map((insuranceType) => {
     const own = rows.filter((row) => row.insuranceType === insuranceType);
     const count = (status: string) => own.find((row) => row.status === status)?.count ?? 0;
     return {

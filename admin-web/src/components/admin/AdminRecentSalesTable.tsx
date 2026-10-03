@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
+  Building2,
   CarFront,
   CheckCircle2,
   Clock,
@@ -8,6 +9,7 @@ import {
   Shield,
   ShieldCheck,
   Tag,
+  Umbrella,
 } from "lucide-react";
 import { formatINR, type RecentPolicySale } from "./admin-mock-data";
 
@@ -53,6 +55,20 @@ export function AdminRecentSalesTable({ policies }: AdminRecentSalesTableProps) 
       return (
         <span className="grid size-6 place-items-center rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
           <CarFront className="size-3.5" />
+        </span>
+      );
+    }
+    if (type === "Life") {
+      return (
+        <span className="grid size-6 place-items-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400">
+          <Umbrella className="size-3.5" />
+        </span>
+      );
+    }
+    if (type === "Commercial") {
+      return (
+        <span className="grid size-6 place-items-center rounded-md bg-violet-500/15 text-violet-700 dark:text-violet-400">
+          <Building2 className="size-3.5" />
         </span>
       );
     }

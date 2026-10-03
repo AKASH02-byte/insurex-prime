@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 // Radix items cannot have an empty value, but our forms use "" for "none selected".
 const EMPTY = "__empty__";
@@ -76,7 +77,8 @@ export function SelectField({
         } as unknown as React.ChangeEvent<HTMLSelectElement>);
       }}
     >
-      <SelectTrigger id={id} aria-label={ariaLabel} className={className}>
+      {/* Sized like a native select (to its content) unless the caller asks for w-full. */}
+      <SelectTrigger id={id} aria-label={ariaLabel} className={cn("w-auto max-w-full", className)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

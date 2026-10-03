@@ -2,7 +2,7 @@ import { formatINR } from "./admin-mock-data";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type PolicyStatus = "Active" | "Pending" | "Expired";
-export type InsuranceType = "Health" | "Motor" | "Other";
+export type InsuranceType = "Health" | "Motor" | "Life" | "Commercial" | "Other";
 export type CustomerStatus = "Active" | "Pending" | "Expired";
 
 export interface CustomerPolicy {

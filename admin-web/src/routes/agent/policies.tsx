@@ -30,6 +30,8 @@ const TYPE_TABS: { id: InsuranceType | ""; label: string }[] = [
   { id: "", label: "All" },
   { id: "HEALTH", label: "Health" },
   { id: "MOTOR", label: "Motor" },
+  { id: "LIFE", label: "Life" },
+  { id: "COMMERCIAL", label: "Commercial" },
 ];
 
 function PolicyCard({ policy, onView }: { policy: ApiPolicy; onView: () => void }) {

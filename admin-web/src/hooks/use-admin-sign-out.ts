@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -7,6 +8,7 @@ import { agentAuthApi, isApiConfigured } from "@/lib/api";
 /** Ends the Super Admin web session and the API session cookie, then returns to /login. */
 export function useAdminSignOut() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const signOut = async () => {
@@ -14,6 +16,8 @@ export function useAdminSignOut() {
     try {
       await endAdminSession();
       if (isApiConfigured) await agentAuthApi.logout().catch(() => undefined);
+      // The next sign-in (maybe another role) must not see this user's cached data.
+      queryClient.clear();
       await navigate({ to: "/login" });
     } catch {
       toast.error("Unable to end your session. Please try again.");

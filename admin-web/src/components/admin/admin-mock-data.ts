@@ -44,7 +44,7 @@ export interface RecentPolicySale {
   policyNumber: string;
   customerName: string;
   customerEmail: string;
-  policyType: "Health" | "Motor" | "Other";
+  policyType: "Health" | "Motor" | "Life" | "Commercial" | "Other";
   policyName: string;
   agentName: string;
   agentCode: string;
@@ -54,7 +54,7 @@ export interface RecentPolicySale {
 }
 
 export interface PolicyCategorySummary {
-  category: "Health Insurance" | "Motor Insurance";
+  category: "Health Insurance" | "Motor Insurance" | "Life Insurance" | "Commercial Insurance";
   total: number;
   active: number;
   expired: number;

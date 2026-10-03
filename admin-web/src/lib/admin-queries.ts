@@ -23,10 +23,12 @@ export const adminKeys = {
 };
 
 /** How often admin tables re-poll the backend while the tab is visible. */
-export const ADMIN_POLL_MS = 15_000;
+export const ADMIN_POLL_MS = 60_000;
 
 export const liveQueryOptions = {
   refetchInterval: ADMIN_POLL_MS,
+  // Revisiting a page shows its cached data at once and refreshes it in the background.
+  staleTime: 30_000,
   refetchOnWindowFocus: true,
   placeholderData: keepPreviousData,
 } as const;

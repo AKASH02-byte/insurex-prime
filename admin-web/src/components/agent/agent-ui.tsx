@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Building2,
   CarFront,
   CheckCircle2,
   ChevronLeft,
@@ -8,6 +9,7 @@ import {
   Clock,
   HeartPulse,
   RotateCcw,
+  Umbrella,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -227,18 +229,24 @@ export const CustomerStatusBadge = ({ status }: { status: CustomerStatus }) => (
   <StatusPill tone={customerTone[status]} label={customerStatusLabel[status]} />
 );
 
+const typeIcon = {
+  HEALTH: HeartPulse,
+  MOTOR: CarFront,
+  LIFE: Umbrella,
+  COMMERCIAL: Building2,
+} as const;
+const typeTone = {
+  HEALTH: "bg-primary/10 text-primary",
+  MOTOR: "bg-teal-500/15 text-teal-700 dark:text-teal-400",
+  LIFE: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  COMMERCIAL: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+} as const;
+
 export function InsuranceTypeBadge({ type }: { type: InsuranceType }) {
-  const Icon = type === "HEALTH" ? HeartPulse : CarFront;
+  const Icon = typeIcon[type];
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <span
-        className={cn(
-          "grid size-6 place-items-center rounded-md",
-          type === "HEALTH"
-            ? "bg-primary/10 text-primary"
-            : "bg-teal-500/15 text-teal-700 dark:text-teal-400",
-        )}
-      >
+      <span className={cn("grid size-6 place-items-center rounded-md", typeTone[type])}>
         <Icon className="size-3.5" />
       </span>
       <span className="font-semibold text-foreground">{insuranceTypeLabel[type]}</span>

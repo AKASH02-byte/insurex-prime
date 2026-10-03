@@ -22,6 +22,7 @@ import {
   type RecentPolicySale,
 } from "@/components/admin/admin-mock-data";
 import { dashboardApi, isApiConfigured, type DashboardSummary } from "@/lib/api";
+import { insuranceTypeLabel } from "@/lib/format";
 import { adminKeys, liveQueryOptions } from "@/lib/admin-queries";
 import { useAdminAgentPerformance, useAdminRecentSales } from "@/hooks/use-admin-live-data";
 import { AdminFooter } from "@/components/admin/AdminFooter";
@@ -149,7 +150,8 @@ function SuperAdminDashboard() {
   const portfolioCategories: PolicyCategorySummary[] = useMemo(
     () =>
       (portfolio.data ?? []).map((row) => ({
-        category: row.insuranceType === "HEALTH" ? "Health Insurance" : "Motor Insurance",
+        category:
+          `${insuranceTypeLabel[row.insuranceType]} Insurance` as PolicyCategorySummary["category"],
         total: row.total,
         active: row.active,
         pending: row.pending,

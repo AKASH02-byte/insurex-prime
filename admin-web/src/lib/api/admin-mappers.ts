@@ -41,8 +41,14 @@ const initials = (name: string) =>
     .map((part) => part[0]!.toUpperCase())
     .join("") || "?";
 
-const typeLabel = (type: InsuranceType): "Health" | "Motor" =>
-  type === "HEALTH" ? "Health" : "Motor";
+const TYPE_LABELS = {
+  HEALTH: "Health",
+  MOTOR: "Motor",
+  LIFE: "Life",
+  COMMERCIAL: "Commercial",
+} as const satisfies Record<InsuranceType, string>;
+
+const typeLabel = (type: InsuranceType) => TYPE_LABELS[type];
 
 const policyStatusLabel = (status: SoldPolicyStatus): "Active" | "Expired" =>
   status === "ACTIVE" ? "Active" : "Expired";

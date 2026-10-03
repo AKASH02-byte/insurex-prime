@@ -4,7 +4,7 @@ import { formatINR } from "./admin-mock-data";
 // Policy products are the catalog the Super Admin manages. Agent policy selection,
 // sold policies, customer policy details, receipts and reports should all reference
 // products through this model (by `id`, displaying `code` / `name`).
-export type PolicyInsuranceType = "Health" | "Motor";
+export type PolicyInsuranceType = "Health" | "Motor" | "Life" | "Commercial";
 export type PolicyProductStatus = "Active" | "Inactive";
 export type PremiumFrequency = "Monthly" | "Quarterly" | "Half-Yearly" | "Annual";
 
@@ -48,6 +48,8 @@ export type PolicyProduct = PolicyProductBase &
   (
     | { type: "Health"; health: HealthPolicyDetails; motor?: never }
     | { type: "Motor"; motor: MotorPolicyDetails; health?: never }
+    // Life and commercial products carry no line-specific detail block.
+    | { type: "Life" | "Commercial"; health?: never; motor?: never }
   );
 
 // ─── Options ──────────────────────────────────────────────────────────────────
@@ -82,6 +84,8 @@ export const premiumRanges: PremiumRange[] = [
 export const policyTypeColors: Record<PolicyInsuranceType, string> = {
   Health: "#2563eb", // matches dashboard policy distribution
   Motor: "#059669",
+  Life: "#f59e0b",
+  Commercial: "#8b5cf6",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

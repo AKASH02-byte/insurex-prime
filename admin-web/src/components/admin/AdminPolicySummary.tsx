@@ -1,9 +1,36 @@
-import { CarFront, CheckCircle2, Clock, HeartPulse, ShieldAlert } from "lucide-react";
+import {
+  Building2,
+  CarFront,
+  CheckCircle2,
+  Clock,
+  HeartPulse,
+  ShieldAlert,
+  Umbrella,
+} from "lucide-react";
 import { formatINR, type PolicyCategorySummary } from "./admin-mock-data";
 
 export interface AdminPolicySummaryProps {
   categories: PolicyCategorySummary[];
 }
+
+const LINE_STYLE = {
+  Health: { icon: HeartPulse, chip: "bg-primary/10 text-primary", bar: "bg-primary" },
+  Motor: {
+    icon: CarFront,
+    chip: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    bar: "bg-emerald-600",
+  },
+  Life: {
+    icon: Umbrella,
+    chip: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    bar: "bg-amber-500",
+  },
+  Commercial: {
+    icon: Building2,
+    chip: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+    bar: "bg-violet-500",
+  },
+} as const;
 
 export function AdminPolicySummary({ categories }: AdminPolicySummaryProps) {
   return (
@@ -15,15 +42,16 @@ export function AdminPolicySummary({ categories }: AdminPolicySummaryProps) {
             Policy Portfolio Summary
           </h2>
           <p className="text-xs text-muted-foreground">
-            Operational status breakdown between Health and Motor insurance product lines
+            Operational status breakdown across your insurance product lines
           </p>
         </div>
 
         {/* Compact Grid */}
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
           {categories.map((item) => {
-            const isHealth = item.category === "Health Insurance";
-            const Icon = isHealth ? HeartPulse : CarFront;
+            const line = item.category.replace(" Insurance", "") as keyof typeof LINE_STYLE;
+            const style = LINE_STYLE[line] ?? LINE_STYLE.Health;
+            const Icon = style.icon;
             const activePercent = item.total ? Math.round((item.active / item.total) * 100) : 0;
 
             return (
@@ -34,13 +62,7 @@ export function AdminPolicySummary({ categories }: AdminPolicySummaryProps) {
                 {/* Line title & icon */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <span
-                      className={`grid size-9 place-items-center rounded-xl ${
-                        isHealth
-                          ? "bg-primary/10 text-primary"
-                          : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                      }`}
-                    >
+                    <span className={`grid size-9 place-items-center rounded-xl ${style.chip}`}>
                       <Icon className="size-4.5" />
                     </span>
                     <div>
@@ -62,9 +84,7 @@ export function AdminPolicySummary({ categories }: AdminPolicySummaryProps) {
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        isHealth ? "bg-primary" : "bg-emerald-600"
-                      }`}
+                      className={`h-full rounded-full transition-all duration-500 ${style.bar}`}
                       style={{ width: `${activePercent}%` }}
                     />
                   </div>

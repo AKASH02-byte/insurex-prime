@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AgentDashboard, AgentDashboardRange } from "@/lib/api/types";
+import type { AgentDashboard, AgentDashboardRange, InsuranceType } from "@/lib/api/types";
 import { formatINR, formatINRCompact, formatNumber, insuranceTypeLabel } from "@/lib/format";
 import { EmptyState, SectionCard } from "./agent-ui";
 
@@ -264,7 +264,7 @@ export function PolicyDistributionChart({
                     if (!row) return null;
                     return (
                       <TooltipCard
-                        title={insuranceTypeLabel[row.insuranceType as "HEALTH" | "MOTOR"]}
+                        title={insuranceTypeLabel[row.insuranceType as InsuranceType]}
                         rows={[
                           ["Policies", `${formatNumber(row.policiesSold)} (${row.percentage}%)`],
                           ["Premium", formatINR(row.premium)],

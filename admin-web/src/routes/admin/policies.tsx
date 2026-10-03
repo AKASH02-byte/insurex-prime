@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  Building2,
+  Umbrella,
   ArrowLeft,
   Car,
   CheckCircle2,
@@ -224,7 +226,8 @@ function fromPolicyForm(
       },
     };
   }
-  return { ...shared, type: "Motor", motor: { ...form.motor } };
+  if (form.type === "Motor") return { ...shared, type: "Motor", motor: { ...form.motor } };
+  return { ...shared, type: form.type };
 }
 
 function formatUpdated(iso: string) {
@@ -243,7 +246,16 @@ const statusStyles: Record<PolicyProductStatus, string> = {
 const typeStyles: Record<PolicyInsuranceType, string> = {
   Health: "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400",
   Motor: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-400",
+  Life: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  Commercial: "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-400",
 };
+
+const typeIcons = {
+  Health: HeartPulse,
+  Motor: Car,
+  Life: Umbrella,
+  Commercial: Building2,
+} as const;
 
 const selectClass =
   "h-9 rounded-xl border border-border bg-surface/50 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary";
@@ -259,7 +271,7 @@ function PolicyStatusBadge({ status }: { status: PolicyProductStatus }) {
 }
 
 function PolicyTypeBadge({ type }: { type: PolicyInsuranceType }) {
-  const Icon = type === "Health" ? HeartPulse : Car;
+  const Icon = typeIcons[type];
   return (
     <Badge variant="outline" className={`rounded-full font-semibold ${typeStyles[type]}`}>
       <Icon className="mr-1 size-3" />
@@ -302,6 +314,31 @@ function PolicyKpiCards({ kpis }: { kpis: PolicyKpis }) {
       color: "text-sky-700 dark:text-sky-400",
       bg: "bg-sky-500/10",
     },
+    // Life and commercial cards appear once the catalog has such policies.
+    ...(kpis.life > 0
+      ? [
+          {
+            label: "Life Policies",
+            value: kpis.life,
+            hint: `${kpis.lifeActive} active`,
+            icon: Umbrella,
+            color: "text-amber-700 dark:text-amber-400",
+            bg: "bg-amber-500/10",
+          },
+        ]
+      : []),
+    ...(kpis.commercial > 0
+      ? [
+          {
+            label: "Commercial Policies",
+            value: kpis.commercial,
+            hint: `${kpis.commercialActive} active`,
+            icon: Building2,
+            color: "text-violet-700 dark:text-violet-400",
+            bg: "bg-violet-500/10",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -569,6 +606,8 @@ function PolicyFormModal({
               >
                 <option value="Health">Health Insurance</option>
                 <option value="Motor">Motor / Car Insurance</option>
+                <option value="Life">Life Insurance</option>
+                <option value="Commercial">Commercial Insurance</option>
               </SelectField>
             </div>
             <div>
@@ -661,12 +700,13 @@ function PolicyFormModal({
 
           <fieldset className="rounded-xl border border-border bg-surface/40 p-4">
             <legend className="flex items-center gap-1.5 px-1 text-sm font-semibold">
-              {form.type === "Health" ? (
-                <HeartPulse className="size-4 text-rose-600" />
-              ) : (
-                <Car className="size-4 text-sky-600" />
-              )}
-              {form.type === "Health" ? "Health coverage details" : "Motor coverage details"}
+              {(() => {
+                const LegendIcon = typeIcons[form.type];
+                return <LegendIcon className="size-4 text-primary" />;
+              })()}
+              {form.type === "Health" || form.type === "Motor"
+                ? `${form.type} coverage details`
+                : `${form.type} plan details`}
             </legend>
             {form.type === "Health" ? (
               <div className="grid gap-3 sm:grid-cols-2">
@@ -726,7 +766,7 @@ function PolicyFormModal({
                   />
                 </div>
               </div>
-            ) : (
+            ) : form.type === "Motor" ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="motor-vehicle">Vehicle type</Label>
@@ -793,7 +833,7 @@ function PolicyFormModal({
                   />
                 </div>
               </div>
-            )}
+            ) : null}
             <div className="mt-3">
               <Label htmlFor="policy-benefits">Key benefits</Label>
               <Textarea
@@ -851,13 +891,15 @@ function PolicyDetailsDialog({
           { label: "Waiting period", value: policy.health.waitingPeriod },
           { label: "Age eligibility", value: policy.health.ageEligibility },
         ]
-      : [
-          { label: "Vehicle type", value: policy.motor.vehicleType },
-          { label: "Coverage type", value: policy.motor.coverageType },
-          { label: "Own damage", value: policy.motor.ownDamage },
-          { label: "Third party coverage", value: policy.motor.thirdPartyCoverage },
-          { label: "Vehicle eligibility", value: policy.motor.vehicleEligibility },
-        ];
+      : policy.type === "Motor"
+        ? [
+            { label: "Vehicle type", value: policy.motor.vehicleType },
+            { label: "Coverage type", value: policy.motor.coverageType },
+            { label: "Own damage", value: policy.motor.ownDamage },
+            { label: "Third party coverage", value: policy.motor.thirdPartyCoverage },
+            { label: "Vehicle eligibility", value: policy.motor.vehicleEligibility },
+          ]
+        : [];
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -915,19 +957,19 @@ function PolicyDetailsDialog({
             ))}
           </section>
 
-          <section>
-            <h3 className="mb-2 font-display font-bold">
-              {policy.type === "Health" ? "Health coverage" : "Motor coverage"}
-            </h3>
-            <dl className="grid gap-x-6 gap-y-3 rounded-xl border border-border bg-surface/40 p-4 text-xs sm:grid-cols-2">
-              {categoryDetails.map((item) => (
-                <div key={item.label} className="min-w-0">
-                  <dt className="text-muted-foreground">{item.label}</dt>
-                  <dd className="mt-0.5 break-words font-semibold">{item.value || "—"}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
+          {categoryDetails.length > 0 && (
+            <section>
+              <h3 className="mb-2 font-display font-bold">{policy.type} coverage</h3>
+              <dl className="grid gap-x-6 gap-y-3 rounded-xl border border-border bg-surface/40 p-4 text-xs sm:grid-cols-2">
+                {categoryDetails.map((item) => (
+                  <div key={item.label} className="min-w-0">
+                    <dt className="text-muted-foreground">{item.label}</dt>
+                    <dd className="mt-0.5 break-words font-semibold">{item.value || "—"}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
 
           <section className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -1329,6 +1371,8 @@ function AdminPoliciesPage() {
                   <option value="All">Type: All</option>
                   <option value="Health">Health</option>
                   <option value="Motor">Motor</option>
+                  <option value="Life">Life</option>
+                  <option value="Commercial">Commercial</option>
                 </SelectField>
                 <SelectField
                   aria-label="Filter by policy status"
