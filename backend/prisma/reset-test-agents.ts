@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- CLI script: console output is its interface */
 /**
  * DEVELOPMENT ONLY. Deletes every agent (and their login accounts, sessions, sold
  * policies and receipts), unassigns their customers, then creates 20 fictional test
