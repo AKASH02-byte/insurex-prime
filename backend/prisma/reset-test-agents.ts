@@ -60,6 +60,7 @@ if (!confirm) {
 const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
 await db.$transaction(
   async (tx) => {
+    const tenant = await tx.tenant.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
     const agents = await tx.agent.findMany({ select: { id: true, userId: true } });
     const ids = agents.map((a) => a.id);
     await tx.customer.updateMany({
@@ -78,6 +79,7 @@ await db.$transaction(
       const passwordHash = await hashPassword(generateDefaultAgentPassword(fullName, phone));
       await tx.agent.create({
         data: {
+          tenant: { connect: { id: tenant.id } },
           agentCode: `AGT-T${String(n).padStart(3, "0")}`,
           fullName,
           phone,
@@ -88,6 +90,7 @@ await db.$transaction(
             create: {
               email: `test.agent${n}@example.com`,
               role: "AGENT",
+              tenant: { connect: { id: tenant.id } },
               passwordHash,
               mustChangePassword: true,
             },

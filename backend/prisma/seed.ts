@@ -13,6 +13,8 @@
  * Re-running the seed resets the demo agents' passwords.
  */
 import { createDatabase } from "../src/config/database.js";
+import { installCatalog } from "../src/modules/catalog/catalog.service.js";
+import { getCatalogTemplate } from "../src/modules/catalog/templates/index.js";
 import { hashPassword } from "../src/modules/auth/password.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import type {
@@ -332,21 +334,109 @@ async function main() {
     create: { email: "admin@insurex.example.com", role: "SUPER_ADMIN" },
   });
 
-  const agentIds: string[] = [];
   const passwordHash = await hashPassword(DEMO_AGENT_PASSWORD);
+
+  // Insurance companies are platform master data.
+  const insurerSeeds = [
+    { code: "TATA_AIA", name: "TATA AIA Life Insurance" },
+    { code: "TATA_AIG", name: "TATA AIG General Insurance" },
+    { code: "LIC", name: "Life Insurance Corporation of India" },
+    { code: "HDFC_LIFE", name: "HDFC Life" },
+    { code: "DIGIT", name: "Go Digit General Insurance" },
+  ];
+  const insurers: Record<string, { id: string; code: string }> = {};
+  for (const insurer of insurerSeeds) {
+    insurers[insurer.code] = await db.insurer.upsert({
+      where: { code: insurer.code },
+      update: { name: insurer.name },
+      create: insurer,
+    });
+  }
+
+  /** A tenant, its single admin, its insurers, and (the first time) each insurer's catalog. */
+  async function ensureTenant(input: {
+    name: string;
+    legalName: string;
+    adminEmail: string;
+    insurers: { code: string; businessCode: string; licenceCode: string }[];
+  }) {
+    const first = input.insurers[0]!;
+    const link = await db.tenantInsurer.findFirst({
+      where: { insurerId: insurers[first.code]!.id, businessCode: first.businessCode },
+      include: { tenant: true },
+    });
+    const tenant =
+      link?.tenant ??
+      (await db.tenant.create({ data: { name: input.name, legalName: input.legalName } }));
+    const credentials = { passwordHash, mustChangePassword: false };
+    await db.user.upsert({
+      where: { email: input.adminEmail },
+      update: credentials,
+      create: {
+        email: input.adminEmail,
+        role: "TENANT_ADMIN",
+        tenantId: tenant.id,
+        ...credentials,
+      },
+    });
+    for (const item of input.insurers) {
+      const insurer = insurers[item.code]!;
+      await db.tenantInsurer.upsert({
+        where: { tenantId_insurerId: { tenantId: tenant.id, insurerId: insurer.id } },
+        update: {},
+        create: {
+          tenantId: tenant.id,
+          insurerId: insurer.id,
+          businessCode: item.businessCode,
+          licenceCode: item.licenceCode,
+        },
+      });
+      const template = getCatalogTemplate(item.code);
+      const loaded = await db.policyCategory.count({
+        where: { tenantId: tenant.id, insurerId: insurer.id },
+      });
+      if (template && loaded === 0) {
+        await db.$transaction((tx) => installCatalog(tx, tenant.id, insurer, template), {
+          timeout: 60_000,
+        });
+      }
+    }
+    return tenant;
+  }
+
+  // Tenant A: an agency selling for TATA AIG (health/motor demo data below) and TATA AIA (life).
+  const tenantA = await ensureTenant({
+    name: "Demo Aakruthi Enterprises",
+    legalName: "Demo Aakruthi Enterprises Pvt Ltd",
+    adminEmail: "demo.tenantadmin.a@example.com",
+    insurers: [
+      { code: "TATA_AIG", businessCode: "DEMO-BC-AIG-001", licenceCode: "DEMO-LIC-AIG-001" },
+      { code: "TATA_AIA", businessCode: "DEMO-BC-AIA-001", licenceCode: "DEMO-LIC-AIA-001" },
+    ],
+  });
+  // Tenant B: a different agency on TATA AIA only; proves tenants cannot see each other.
+  const tenantB = await ensureTenant({
+    name: "Demo XYZ Enterprises",
+    legalName: "Demo XYZ Enterprises Pvt Ltd",
+    adminEmail: "demo.tenantadmin.b@example.com",
+    insurers: [{ code: "TATA_AIA", businessCode: "DEMO-BC-AIA-002", licenceCode: "DEMO-LIC-AIA-002" }],
+  });
+
+  const agentIds: string[] = [];
   for (const [index, agent] of agents.entries()) {
     const email = `demo.agent${index + 1}@example.com`;
     const credentials = { passwordHash, mustChangePassword: index === 3 };
     const user = await db.user.upsert({
       where: { email },
       update: credentials,
-      create: { email, role: "AGENT", ...credentials },
+      create: { email, role: "AGENT", tenantId: tenantA.id, ...credentials },
     });
     const saved = await db.agent.upsert({
       where: { agentCode: agent.agentCode },
       update: { fullName: agent.fullName, phone: agent.phone },
       create: {
         ...agent,
+        tenantId: tenantA.id,
         userId: user.id,
         address: `Demo Office ${index + 1}, ${cities[index % cities.length]![0]}`,
         joinedAt: daysAgo(400 + index * 60),
@@ -360,9 +450,9 @@ async function main() {
   for (const policy of policies) {
     policyRecords.push(
       await db.policy.upsert({
-        where: { policyCode: policy.policyCode },
+        where: { tenantId_policyCode: { tenantId: tenantA.id, policyCode: policy.policyCode } },
         update: { ...policy },
-        create: { ...policy },
+        create: { ...policy, tenantId: tenantA.id, insurerId: insurers.TATA_AIG!.id },
       }),
     );
   }
@@ -375,6 +465,7 @@ async function main() {
       where: { customerCode },
       update: {},
       create: {
+        tenantId: tenantA.id,
         customerCode,
         fullName,
         dateOfBirth: new Date(Date.UTC(1975 + index * 2, index % 12, 5 + index)),
@@ -395,13 +486,16 @@ async function main() {
   }
 
   // 20 sales across the last ~14 months.
-  const sellable = policyRecords.filter((policy) => policy.status === "ACTIVE");
+  const sellable = policyRecords.filter(
+    (policy) =>
+      policy.status === "ACTIVE" && policy.premium !== null && policy.durationMonths !== null,
+  );
   const methods: PaymentMethod[] = ["UPI", "CARD", "NET_BANKING", "CASH", "BANK_TRANSFER"];
   for (let index = 0; index < 20; index += 1) {
     const customerIndex = index % customerIds.length;
     const policy = sellable[(index * 3) % sellable.length]!;
     const issueDate = daysAgo(10 + index * 21);
-    const expiryDate = addMonthsMinusDay(issueDate, policy.durationMonths);
+    const expiryDate = addMonthsMinusDay(issueDate, policy.durationMonths!);
     const expired = expiryDate < today;
 
     let policyStatus: SoldPolicyStatus;
@@ -422,11 +516,12 @@ async function main() {
       where: { policyNumber },
       update: {},
       create: {
+        tenantId: tenantA.id,
         policyNumber,
         policyId: policy.id,
         customerId: customerIds[customerIndex]!,
         agentId: agentIds[customerIndex % 4]!,
-        premium: policy.premium,
+        premium: policy.premium!,
         issueDate,
         expiryDate,
         paymentStatus,
@@ -440,9 +535,10 @@ async function main() {
         where: { receiptNumber },
         update: {},
         create: {
+          tenantId: tenantA.id,
           receiptNumber,
           soldPolicyId: sold.id,
-          amount: policy.premium,
+          amount: policy.premium!,
           paymentMethod: methods[index % methods.length]!,
           paymentStatus,
           issuedAt: new Date(issueDate.getTime() + 2 * 60 * 60 * 1000),
@@ -451,7 +547,71 @@ async function main() {
     }
   }
 
+  // Tenant B: one agent, two customers and two recorded Life sales (priced on the insurer portal).
+  const userB = await db.user.upsert({
+    where: { email: "demo.agent.b1@example.com" },
+    update: { passwordHash },
+    create: {
+      email: "demo.agent.b1@example.com",
+      role: "AGENT",
+      tenantId: tenantB.id,
+      passwordHash,
+      mustChangePassword: false,
+    },
+  });
+  const agentB = await db.agent.upsert({
+    where: { agentCode: "AGT-DEMOB1" },
+    update: {},
+    create: {
+      tenantId: tenantB.id,
+      userId: userB.id,
+      agentCode: "AGT-DEMOB1",
+      fullName: "Demo Agent Bhavna",
+      phone: "+91 90000 00021",
+      joinedAt: daysAgo(200),
+    },
+  });
+  const lifePolicies = await db.policy.findMany({
+    where: { tenantId: tenantB.id, insuranceType: "LIFE" },
+    orderBy: { policyCode: "asc" },
+    take: 2,
+  });
+  for (const [index, policy] of lifePolicies.entries()) {
+    const customerCode = `CUS-DEMOB${index + 1}`;
+    const customer = await db.customer.upsert({
+      where: { customerCode },
+      update: {},
+      create: {
+        tenantId: tenantB.id,
+        customerCode,
+        fullName: `Demo Customer B${index + 1}`,
+        phone: `+91 90000 20${String(index + 1).padStart(3, "0")}`,
+        assignedAgentId: agentB.id,
+      },
+    });
+    const issueDate = daysAgo(30 + index * 20);
+    await db.soldPolicy.upsert({
+      where: { policyNumber: `POL-DEMOB-${index + 1}` },
+      update: {},
+      create: {
+        tenantId: tenantB.id,
+        policyNumber: `POL-DEMOB-${index + 1}`,
+        insurerPolicyNumber: `AIA-DEMO-${1000 + index}`,
+        policyId: policy.id,
+        customerId: customer.id,
+        agentId: agentB.id,
+        premium: 25_000 + index * 5_000,
+        issueDate,
+        expiryDate: addMonthsMinusDay(issueDate, 12),
+        paymentStatus: "PAID",
+        policyStatus: "ACTIVE",
+      },
+    });
+  }
+
   const counts = {
+    insurers: await db.insurer.count(),
+    tenants: await db.tenant.count(),
     users: await db.user.count(),
     agents: await db.agent.count(),
     customers: await db.customer.count(),
@@ -460,6 +620,9 @@ async function main() {
     receipts: await db.receipt.count(),
   };
   console.warn("Demo data ready:", counts);
+  console.warn(
+    `Demo tenant admins: demo.tenantadmin.a@example.com / demo.tenantadmin.b@example.com (same password). Tenant B agent: AGT-DEMOB1.`,
+  );
   console.warn(
     `Demo agent sign-in: AGT-DEMO1 (or demo.agent1@example.com) / ${DEMO_AGENT_PASSWORD}`,
   );

@@ -3,7 +3,7 @@ import type { z } from "zod";
 import type { Database } from "../../config/database.js";
 import type { Prisma } from "../../generated/prisma/client.js";
 import type { AuthContext } from "../../middleware/auth.js";
-import { isSuperAdmin, requireAgentId } from "../../middleware/role.js";
+import { isAdmin, requireAgentId, requireTenantId } from "../../middleware/role.js";
 import { randomCode, withGeneratedCode } from "../../utils/codes.js";
 import { badRequest, conflict, notFound } from "../../utils/errors.js";
 import { parseDateOnly, toDateOnly, toNumber } from "../../utils/format.js";
@@ -20,6 +20,10 @@ const agentRefSelect = { select: { id: true, agentCode: true, fullName: true } }
 const customerInclude = {
   assignedAgent: agentRefSelect,
   _count: { select: { soldPolicies: true } },
+  soldPolicies: {
+    select: { policyNumber: true },
+    orderBy: { issueDate: "desc" },
+  },
 } as const;
 
 type CustomerRecord = Prisma.CustomerGetPayload<{ include: typeof customerInclude }>;
@@ -40,13 +44,14 @@ const toCustomerDto = (customer: CustomerRecord) => ({
   assignedAgent: customer.assignedAgent,
   status: customer.status,
   policiesCount: customer._count.soldPolicies,
+  policyNumbers: customer.soldPolicies.map((sold) => sold.policyNumber),
   createdAt: customer.createdAt.toISOString(),
   updatedAt: customer.updatedAt.toISOString(),
 });
 
 /** Agents only ever see customers assigned to them. */
 export const customerScope = (auth: AuthContext): Prisma.CustomerWhereInput =>
-  isSuperAdmin(auth) ? {} : { assignedAgentId: requireAgentId(auth) };
+  isAdmin(auth) ? {} : { assignedAgentId: requireAgentId(auth) };
 
 export async function listCustomers(
   db: Database,
@@ -57,7 +62,7 @@ export async function listCustomers(
     AND: [
       customerScope(auth),
       query.status ? { status: query.status } : {},
-      isSuperAdmin(auth) && query.agentId ? { assignedAgentId: query.agentId } : {},
+      isAdmin(auth) && query.agentId ? { assignedAgentId: query.agentId } : {},
       query.city ? { city: containsInsensitive(query.city) } : {},
       query.insuranceType
         ? { soldPolicies: { some: { policy: { insuranceType: query.insuranceType } } } }
@@ -153,10 +158,8 @@ export async function createCustomer(
   body: z.infer<typeof createCustomerBodySchema>,
 ) {
   // Agents' customers always belong to the calling agent, whatever the body says.
-  const assignedAgentId = isSuperAdmin(auth)
-    ? (body.assignedAgentId ?? null)
-    : requireAgentId(auth);
-  if (isSuperAdmin(auth) && assignedAgentId) await assertAssignableAgent(db, assignedAgentId);
+  const assignedAgentId = isAdmin(auth) ? (body.assignedAgentId ?? null) : requireAgentId(auth);
+  if (isAdmin(auth) && assignedAgentId) await assertAssignableAgent(db, assignedAgentId);
 
   const customer = await withGeneratedCode(
     () => randomCode("CUS"),
@@ -165,6 +168,7 @@ export async function createCustomer(
         const created = await tx.customer.create({
           data: {
             ...customerData(body),
+            tenantId: requireTenantId(auth),
             fullName: body.fullName,
             phone: body.phone,
             customerCode,
@@ -198,7 +202,7 @@ export async function updateCustomer(
   if (!existing) throw notFound("Customer");
 
   // Only Super Admins can reassign customers.
-  const reassign = isSuperAdmin(auth) && body.assignedAgentId !== undefined;
+  const reassign = isAdmin(auth) && body.assignedAgentId !== undefined;
   if (reassign && body.assignedAgentId) await assertAssignableAgent(db, body.assignedAgentId);
 
   const customer = await db.$transaction(async (tx) => {

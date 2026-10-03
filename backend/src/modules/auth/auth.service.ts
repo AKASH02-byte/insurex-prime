@@ -1,14 +1,21 @@
 import type { Database } from "../../config/database.js";
 import { AppError } from "../../utils/errors.js";
 
-export const userInclude = { agent: { include: { user: { select: { email: true } } } } } as const;
+export const userInclude = {
+  agent: { include: { user: { select: { email: true } } } },
+  tenant: {
+    include: {
+      insurers: { include: { insurer: { select: { id: true, code: true, name: true } } } },
+    },
+  },
+} as const;
 
 function isUniqueViolation(error: unknown) {
   return (error as { code?: unknown }).code === "P2002";
 }
 
 /**
- * Maps a verified Firebase identity to an InsureX user.
+ * Maps a verified Firebase identity to an InsuroX user.
  *
  * - Known Firebase UID → that user.
  * - Email of a pre-provisioned user (e.g. an agent created by a Super Admin) that has
@@ -66,7 +73,7 @@ export async function resolveUserForIdentity(
     throw new AppError(
       403,
       "ACCOUNT_NOT_PROVISIONED",
-      "This account has not been set up for InsureX. Contact your administrator.",
+      "This account has not been set up for InsuroX. Contact your administrator.",
     );
   }
   assertCanSignIn(user);
@@ -79,6 +86,12 @@ type UserWithAgent = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 export function assertCanSignIn(user: UserWithAgent) {
   if (user.status !== "ACTIVE") {
     throw new AppError(403, "ACCOUNT_DISABLED", "This account has been disabled.");
+  }
+  if (user.role !== "SUPER_ADMIN" && !user.tenant) {
+    throw new AppError(403, "ACCOUNT_NOT_PROVISIONED", "This account is not attached to a tenant.");
+  }
+  if (user.tenant && user.tenant.status !== "ACTIVE") {
+    throw new AppError(403, "ACCOUNT_DISABLED", "This tenant account has been suspended.");
   }
   if (user.role === "AGENT") {
     if (!user.agent) {

@@ -2,14 +2,15 @@ import type { FastifyRequest } from "fastify";
 import type { z } from "zod";
 import type { Database } from "../../config/database.js";
 import { Prisma, type Policy } from "../../generated/prisma/client.js";
-import type { PolicyStatus } from "../../generated/prisma/enums.js";
+import type { InsuranceType, PolicyStatus } from "../../generated/prisma/enums.js";
 import type { AuthContext } from "../../middleware/auth.js";
-import { isSuperAdmin } from "../../middleware/role.js";
+import { isAdmin, requireAuth, requireTenantId } from "../../middleware/role.js";
 import { badRequest, conflict, notFound } from "../../utils/errors.js";
-import { toNumber } from "../../utils/format.js";
+import { toNullableNumber } from "../../utils/format.js";
 import { buildMeta, toDateFilter, toSkipTake } from "../../utils/pagination.js";
 import { containsInsensitive } from "../../utils/search.js";
 import { changedFields, recordAudit } from "../audit-logs/audit-logs.service.js";
+import { resolveInsurerId } from "../catalog/catalog.service.js";
 import {
   categoryDetailsSchema,
   type CategoryDetails,
@@ -18,7 +19,17 @@ import {
   type updatePolicyBodySchema,
 } from "./policies.schemas.js";
 
-type PolicyWithCount = Policy & { _count?: { soldPolicies: number } };
+type PolicyWithCount = Policy & {
+  _count?: { soldPolicies: number };
+  category?: { id: string; name: string } | null;
+  insurer: { id: string; code: string; name: string };
+};
+
+const policyInclude = {
+  insurer: { select: { id: true, code: true, name: true } },
+  category: { select: { id: true, name: true } },
+  _count: { select: { soldPolicies: true } },
+} as const;
 
 function parseDetails(value: Prisma.JsonValue | null): CategoryDetails | null {
   const parsed = categoryDetailsSchema.safeParse(value);
@@ -31,8 +42,12 @@ export const toPolicyDto = (policy: PolicyWithCount, includeSales: boolean) => (
   policyName: policy.policyName,
   insuranceType: policy.insuranceType,
   description: policy.description,
-  coverageAmount: toNumber(policy.coverageAmount),
-  premium: toNumber(policy.premium),
+  insurerId: policy.insurerId,
+  insurer: policy.insurer,
+  categoryId: policy.categoryId,
+  category: policy.category ?? null,
+  coverageAmount: toNullableNumber(policy.coverageAmount),
+  premium: toNullableNumber(policy.premium),
   premiumFrequency: policy.premiumFrequency,
   durationMonths: policy.durationMonths,
   eligibility: policy.eligibility,
@@ -47,14 +62,14 @@ export const toPolicyDto = (policy: PolicyWithCount, includeSales: boolean) => (
 
 /** Agents can only ever see ACTIVE catalog policies. */
 const policyScope = (auth: AuthContext): Prisma.PolicyWhereInput =>
-  isSuperAdmin(auth) ? {} : { status: "ACTIVE" };
+  isAdmin(auth) ? {} : { status: "ACTIVE" };
 
 export async function listPolicies(
   db: Database,
   auth: AuthContext,
   query: z.infer<typeof listPoliciesQuerySchema>,
 ) {
-  const admin = isSuperAdmin(auth);
+  const admin = isAdmin(auth);
   const premium =
     query.premiumMin !== undefined || query.premiumMax !== undefined
       ? {
@@ -67,6 +82,8 @@ export async function listPolicies(
       policyScope(auth),
       admin && query.status ? { status: query.status } : {},
       query.insuranceType ? { insuranceType: query.insuranceType } : {},
+      query.insurerId ? { insurerId: query.insurerId } : {},
+      query.categoryId ? { categoryId: query.categoryId } : {},
       query.premiumFrequency ? { premiumFrequency: query.premiumFrequency } : {},
       premium ? { premium } : {},
       toDateFilter(query) ? { createdAt: toDateFilter(query) } : {},
@@ -84,7 +101,9 @@ export async function listPolicies(
     db.policy.count({ where }),
     db.policy.findMany({
       where,
-      ...(admin ? { include: { _count: { select: { soldPolicies: true } } } } : {}),
+      include: admin
+        ? policyInclude
+        : { category: policyInclude.category, insurer: policyInclude.insurer },
       orderBy: [{ [query.sortBy]: query.order }, { id: "asc" }],
       ...toSkipTake(query),
     }),
@@ -96,19 +115,40 @@ export async function listPolicies(
 }
 
 export async function getPolicy(db: Database, auth: AuthContext, id: string) {
-  const admin = isSuperAdmin(auth);
+  const admin = isAdmin(auth);
   const policy = await db.policy.findFirst({
     where: { id, ...policyScope(auth) },
-    ...(admin ? { include: { _count: { select: { soldPolicies: true } } } } : {}),
+    include: admin
+      ? policyInclude
+      : { category: policyInclude.category, insurer: policyInclude.insurer },
   });
   if (!policy) throw notFound("Policy");
   return toPolicyDto(policy, admin);
 }
 
 async function assertCodeAvailable(db: Database, policyCode: string, exceptId?: string) {
-  const existing = await db.policy.findUnique({ where: { policyCode }, select: { id: true } });
+  // The database is tenant-scoped, so codes only need to be unique within the tenant.
+  const existing = await db.policy.findFirst({ where: { policyCode }, select: { id: true } });
   if (existing && existing.id !== exceptId) {
     throw conflict(`Policy code ${policyCode} is already in use.`);
+  }
+}
+
+/** The category must belong to this tenant (scoped client) and match the policy's line. */
+async function assertCategoryFits(
+  db: Database,
+  categoryId: string | null | undefined,
+  insuranceType: InsuranceType,
+  insurerId: string,
+) {
+  if (!categoryId) return;
+  const category = await db.policyCategory.findUnique({ where: { id: categoryId } });
+  if (!category) throw badRequest("categoryId does not refer to a category in this catalog.");
+  if (category.line !== insuranceType) {
+    throw badRequest(`That category belongs to the ${category.line} line, not ${insuranceType}.`);
+  }
+  if (category.insurerId !== insurerId) {
+    throw badRequest("That category belongs to a different insurer.");
   }
 }
 
@@ -121,10 +161,22 @@ export async function createPolicy(
   body: z.infer<typeof createPolicyBodySchema>,
 ) {
   await assertCodeAvailable(db, body.policyCode);
+  const tenantId = requireTenantId(requireAuth(request));
+  // A policy in a category always belongs to that category's insurer.
+  const category = body.categoryId
+    ? await db.policyCategory.findUnique({ where: { id: body.categoryId } })
+    : null;
+  const insurerId = category
+    ? category.insurerId
+    : await resolveInsurerId(db, tenantId, body.insurerId);
+  if (body.insurerId && body.insurerId !== insurerId) {
+    throw badRequest("The category belongs to a different insurer.");
+  }
+  await assertCategoryFits(db, body.categoryId, body.insuranceType, insurerId);
   const policy = await db.$transaction(async (tx) => {
     const created = await tx.policy.create({
-      data: { ...body, categoryDetails: detailsJson(body.categoryDetails) },
-      include: { _count: { select: { soldPolicies: true } } },
+      data: { ...body, tenantId, insurerId, categoryDetails: detailsJson(body.categoryDetails) },
+      include: policyInclude,
     });
     await recordAudit(tx, request, {
       action: "policy.create",
@@ -151,6 +203,10 @@ export async function updatePolicy(
 
   // Keep category details consistent with the (possibly new) insurance type.
   const insuranceType = body.insuranceType ?? existing.insuranceType;
+  const categoryId = body.categoryId !== undefined ? body.categoryId : existing.categoryId;
+  if (body.categoryId !== undefined || body.insuranceType !== undefined) {
+    await assertCategoryFits(db, categoryId, insuranceType, existing.insurerId);
+  }
   const details =
     body.categoryDetails !== undefined
       ? body.categoryDetails
@@ -161,13 +217,14 @@ export async function updatePolicy(
     }
   }
   const nextDetails = details && details.kind === insuranceType ? details : null;
-  const { categoryDetails: _categoryDetails, ...fields } = body;
+  // A policy never moves to another insurer.
+  const { categoryDetails: _categoryDetails, insurerId: _insurerId, ...fields } = body;
 
   const policy = await db.$transaction(async (tx) => {
     const updated = await tx.policy.update({
       where: { id },
       data: { ...fields, categoryDetails: detailsJson(nextDetails) },
-      include: { _count: { select: { soldPolicies: true } } },
+      include: policyInclude,
     });
     await recordAudit(tx, request, {
       action: "policy.update",
@@ -193,7 +250,7 @@ export async function setPolicyStatus(
     const updated = await tx.policy.update({
       where: { id },
       data: { status },
-      include: { _count: { select: { soldPolicies: true } } },
+      include: policyInclude,
     });
     await recordAudit(tx, request, {
       action: "policy.status",

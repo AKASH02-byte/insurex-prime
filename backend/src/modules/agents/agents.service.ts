@@ -4,7 +4,7 @@ import type { Database } from "../../config/database.js";
 import type { Prisma } from "../../generated/prisma/client.js";
 import type { AgentStatus } from "../../generated/prisma/enums.js";
 import type { AuthContext } from "../../middleware/auth.js";
-import { isSuperAdmin } from "../../middleware/role.js";
+import { isAdmin, requireAuth, requireTenantId } from "../../middleware/role.js";
 import { withGeneratedCode, randomCode } from "../../utils/codes.js";
 import { conflict, notFound } from "../../utils/errors.js";
 import { parseDateOnly } from "../../utils/format.js";
@@ -69,7 +69,7 @@ export async function listAgents(db: Database, query: z.infer<typeof listAgentsQ
 
 /** Super Admins can read any agent; agents can read only themselves. */
 export async function getAgent(db: Database, auth: AuthContext, id: string) {
-  if (!isSuperAdmin(auth) && auth.agentId !== id) throw notFound("Agent");
+  if (!isAdmin(auth) && auth.agentId !== id) throw notFound("Agent");
   const agent = await db.agent.findUnique({ where: { id }, include: agentInclude });
   if (!agent) throw notFound("Agent");
   return toAgentWithStats(agent);
@@ -102,35 +102,53 @@ export async function createAgent(
   const temporaryPassword = generateDefaultAgentPassword(body.fullName, phone);
   const passwordHash = await hashPassword(temporaryPassword);
 
-  const agent = await withGeneratedCode(
-    () => body.agentCode ?? randomCode("AGT"),
-    (agentCode) =>
-      db.$transaction(async (tx) => {
-        const created = await tx.agent.create({
-          data: {
-            agentCode,
-            fullName: body.fullName,
-            phone,
-            address: body.address ?? null,
-            status: body.status,
-            ...(body.joinedAt ? { joinedAt: parseDateOnly(body.joinedAt) } : {}),
-            // Signs in with agent code, phone or email + the default password, then picks their own.
-            user: {
-              create: { email: body.email, role: "AGENT", passwordHash, mustChangePassword: true },
+  const tenantId = requireTenantId(requireAuth(request));
+  let agent;
+  try {
+    agent = await withGeneratedCode(
+      () => body.agentCode ?? randomCode("AGT"),
+      (agentCode) =>
+        db.$transaction(async (tx) => {
+          // Signs in with agent code, phone or email + the default password, then picks their own.
+          const user = await tx.user.create({
+            data: {
+              email: body.email,
+              role: "AGENT",
+              tenantId,
+              passwordHash,
+              mustChangePassword: true,
             },
-          },
-          include: agentInclude,
-        });
-        await recordAudit(tx, request, {
-          action: "agent.create",
-          entity: "Agent",
-          entityId: created.id,
-          metadata: { agentCode: created.agentCode },
-        });
-        return created;
-      }),
-    body.agentCode ? 1 : 5,
-  );
+          });
+          const created = await tx.agent.create({
+            data: {
+              tenantId,
+              userId: user.id,
+              agentCode,
+              fullName: body.fullName,
+              phone,
+              address: body.address ?? null,
+              status: body.status,
+              ...(body.joinedAt ? { joinedAt: parseDateOnly(body.joinedAt) } : {}),
+            },
+            include: agentInclude,
+          });
+          await recordAudit(tx, request, {
+            action: "agent.create",
+            entity: "Agent",
+            entityId: created.id,
+            metadata: { agentCode: created.agentCode },
+          });
+          return created;
+        }),
+      body.agentCode ? 1 : 5,
+    );
+  } catch (error) {
+    // Agent codes are unique across all tenants, which this tenant-scoped pre-check cannot see.
+    if (body.agentCode && (error as { code?: unknown }).code === "P2002") {
+      throw conflict(`Agent code ${body.agentCode} is already in use.`);
+    }
+    throw error;
+  }
   return { ...toAgentWithStats(agent), temporaryPassword };
 }
 

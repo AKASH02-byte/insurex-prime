@@ -89,6 +89,19 @@ export const distributionSchema = z
   )
   .meta({ id: "PolicyDistribution" });
 
+export const portfolioSummarySchema = z
+  .array(
+    z.object({
+      insuranceType: z.enum(InsuranceType),
+      total: z.number().int(),
+      active: z.number().int(),
+      pending: z.number().int(),
+      expired: z.number().int(),
+      totalPremium: z.number(),
+    }),
+  )
+  .meta({ id: "PortfolioSummary" });
+
 export const agentPerformanceSchema = z
   .object({
     agentId: z.uuid(),

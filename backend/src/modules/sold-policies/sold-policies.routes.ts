@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { requireAuth, requireRole } from "../../middleware/role.js";
+import { requireAuth, tenantAdminOnly } from "../../middleware/role.js";
 import {
   errorResponses,
   ok,
@@ -45,7 +45,11 @@ export const soldPolicyRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { items, meta } = await listSoldPolicies(app.db, requireAuth(request), request.query);
+      const { items, meta } = await listSoldPolicies(
+        request.db,
+        requireAuth(request),
+        request.query,
+      );
       return paginated(items, meta);
     },
   );
@@ -63,7 +67,7 @@ export const soldPolicyRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(soldPolicyQuoteSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await quoteSoldPolicy(app.db, requireAuth(request), request.query)),
+    async (request) => ok(await quoteSoldPolicy(request.db, requireAuth(request), request.query)),
   );
 
   app.get(
@@ -77,7 +81,7 @@ export const soldPolicyRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(soldPolicyDetailSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getSoldPolicy(app.db, requireAuth(request), request.params.id)),
+    async (request) => ok(await getSoldPolicy(request.db, requireAuth(request), request.params.id)),
   );
 
   app.post(
@@ -96,13 +100,13 @@ export const soldPolicyRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) =>
       reply
         .code(201)
-        .send(ok(await createSoldPolicy(app.db, requireAuth(request), request, request.body))),
+        .send(ok(await createSoldPolicy(request.db, requireAuth(request), request, request.body))),
   );
 
   app.patch(
     "/:id",
     {
-      preHandler: requireRole("SUPER_ADMIN"),
+      preHandler: tenantAdminOnly,
       schema: {
         tags,
         security,
@@ -112,6 +116,7 @@ export const soldPolicyRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(soldPolicyDetailSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await updateSoldPolicy(app.db, request, request.params.id, request.body)),
+    async (request) =>
+      ok(await updateSoldPolicy(request.db, request, request.params.id, request.body)),
   );
 };

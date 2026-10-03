@@ -44,7 +44,7 @@ export const customerRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { items, meta } = await listCustomers(app.db, requireAuth(request), request.query);
+      const { items, meta } = await listCustomers(request.db, requireAuth(request), request.query);
       return paginated(items, meta);
     },
   );
@@ -60,7 +60,7 @@ export const customerRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(customerDetailSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getCustomer(app.db, requireAuth(request), request.params.id)),
+    async (request) => ok(await getCustomer(request.db, requireAuth(request), request.params.id)),
   );
 
   app.post(
@@ -78,7 +78,7 @@ export const customerRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) =>
       reply
         .code(201)
-        .send(ok(await createCustomer(app.db, requireAuth(request), request, request.body))),
+        .send(ok(await createCustomer(request.db, requireAuth(request), request, request.body))),
   );
 
   app.patch(
@@ -97,7 +97,7 @@ export const customerRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request) =>
       ok(
         await updateCustomer(
-          app.db,
+          request.db,
           requireAuth(request),
           request,
           request.params.id,
@@ -119,7 +119,7 @@ export const customerRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      await deleteCustomer(app.db, requireAuth(request), request, request.params.id);
+      await deleteCustomer(request.db, requireAuth(request), request, request.params.id);
       return ok({ id: request.params.id });
     },
   );

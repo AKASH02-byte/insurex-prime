@@ -82,7 +82,12 @@ async function getPremiumTrend(db: Database, agentId: string, today: Date) {
  * Everything on the agent dashboard, computed in PostgreSQL for one agent. The agent
  * id always comes from the authenticated session, never from the request.
  */
-export async function getAgentDashboard(db: Database, agentId: string, range: DashboardRange) {
+export async function getAgentDashboard(
+  db: Database,
+  tenantId: string,
+  agentId: string,
+  range: DashboardRange,
+) {
   const today = todayUtc();
   const expiringUntil = addDays(today, EXPIRING_WINDOW_DAYS);
   const notCancelled: Prisma.SoldPolicyWhereInput = {
@@ -125,10 +130,10 @@ export async function getAgentDashboard(db: Database, agentId: string, range: Da
     db.soldPolicy.count({ where: expiringWhere }),
     getSalesOverTime(
       db,
-      { agentId },
+      { tenantId, agentId },
       { interval: trend.interval, from: toDateOnly(trend.from), to: toDateOnly(today) },
     ),
-    getPolicyDistribution(db, { agentId }, {}),
+    getPolicyDistribution(db, { tenantId, agentId }, {}),
     getPremiumTrend(db, agentId, today),
     db.soldPolicy.findMany({
       where: { agentId },

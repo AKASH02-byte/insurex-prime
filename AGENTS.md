@@ -9,4 +9,5 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Keep the public InsureX experience as one anchored landing page; `/login` remains a visual placeholder until authentication is requested.
+- Repository layout: `admin-web/` (login, admin and agent portals), `public-web/` (the public landing page) and `backend/` (API). It is a pnpm workspace: install once at the root and use `pnpm --filter <admin-web|public-web|backend> <script>`.
+- Keep the public InsuroX experience in `public-web/` as one anchored landing page; its Login links point to `admin-web`'s `/login` via `VITE_ADMIN_WEB_URL`.

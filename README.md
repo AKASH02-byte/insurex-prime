@@ -1,4 +1,4 @@
-# InsureX Launchpad
+# InsuroX Launchpad
 
 Role: Act as an Awwwards-winning creative frontend developer and UI/UX designer.
 Task: Build an ultra-modern, visually striking landing page.
@@ -39,7 +39,7 @@ Create a premium, professional insurance website for a company that handles:
   Create a sticky navigation bar.
   Left:
 - Professional insurance company logo/icon
-- Company name: "InsureX"
+- Company name: "InsuroX"
   Center navigation:
 - Home
 - Insurance
@@ -109,7 +109,7 @@ Create a premium, professional insurance website for a company that handles:
 - "Admin / Agent Login"
   FOOTER:
   Include:
-  InsureX logo/name
+  InsuroX logo/name
   Short company description
   Quick Links
   Insurance
@@ -117,7 +117,7 @@ Create a premium, professional insurance website for a company that handles:
   Contact
   Login
   Add:
-  "© 2026 InsureX. All rights reserved."
+  "© 2026 InsuroX. All rights reserved."
   IMPORTANT FUNCTIONALITY:
 - "Admin / Agent Login" buttons must navigate to /login
 - Navigation links should work
@@ -147,25 +147,44 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Prefer working locally? You need Node.js and pnpm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+
+The repository holds three apps:
+
+| Folder        | What it is                                             | Dev port |
+| ------------- | ------------------------------------------------------ | -------- |
+| `admin-web/`  | `/login`, Super Admin / tenant admin portal, agent workspace | 8080 |
+| `public-web/` | The public anchored landing page                       | 3000     |
+| `backend/`    | Fastify + PostgreSQL + Prisma API                      | 4000     |
 
 ```sh
 git clone <this-repository-url>
 cd <repository-name>
-npm i
-npm run dev
+pnpm install                     # one install for all three apps
+
+pnpm dev:admin                   # admin-web   (http://localhost:8080)
+pnpm dev:public                  # public-web  (http://localhost:3000)
+pnpm dev:backend                 # backend     (http://localhost:4000)
+
+pnpm build                       # build everything
+pnpm --filter admin-web build    # or one module by name: admin-web, public-web, backend
 ```
+
+The apps are a pnpm workspace (`pnpm-workspace.yaml`). Install [pnpm](https://pnpm.io/installation) first.
+
+`public-web` links to the portal through `VITE_ADMIN_WEB_URL`, and `admin-web` links back
+through `VITE_PUBLIC_SITE_URL` (see each folder's `.env.example`).
 
 ---
 
 ## Development: backend API
 
 The REST API (Fastify + PostgreSQL + Prisma, Firebase token auth) lives in
-[`backend/`](backend/README.md) and is deployed separately from this frontend.
+[`backend/`](backend/README.md) and is deployed separately from the web apps.
 
 - The frontend talks to it only when `VITE_API_BASE_URL` is set (e.g.
   `http://localhost:4000`). Without it, admin pages use the built-in demo data.
 - API calls send the signed-in user's Firebase ID token as `Authorization: Bearer …`.
-  Client code lives in `src/lib/api/`.
+  Client code lives in `admin-web/src/lib/api/`.
 - Currently backed by the API: Policies page (list, filters, CRUD, analytics),
   dashboard KPI cards, and a best-effort `/auth/verify` after Google sign-in.

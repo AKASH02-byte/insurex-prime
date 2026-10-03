@@ -1,5 +1,10 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { requireAgentId, requireAuth, requireRole } from "../../middleware/role.js";
+import {
+  requireAgentId,
+  requireAuth,
+  requireRole,
+  requireTenantId,
+} from "../../middleware/role.js";
 import { errorResponses, ok, successSchema } from "../../utils/response.js";
 import {
   agentDashboardQuerySchema,
@@ -32,7 +37,12 @@ export const agentPortalRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) =>
       ok(
-        await getAgentDashboard(app.db, requireAgentId(requireAuth(request)), request.query.range),
+        await getAgentDashboard(
+          request.db,
+          requireTenantId(requireAuth(request)),
+          requireAgentId(requireAuth(request)),
+          request.query.range,
+        ),
       ),
   );
 
@@ -46,7 +56,7 @@ export const agentPortalRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(agentProfileSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getAgentProfile(app.db, requireAgentId(requireAuth(request)))),
+    async (request) => ok(await getAgentProfile(request.db, requireAgentId(requireAuth(request)))),
   );
 
   app.patch(
@@ -64,7 +74,7 @@ export const agentPortalRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request) =>
       ok(
         await updateAgentProfile(
-          app.db,
+          request.db,
           request,
           requireAgentId(requireAuth(request)),
           request.body,

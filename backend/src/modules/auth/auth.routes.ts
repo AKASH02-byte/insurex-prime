@@ -18,6 +18,24 @@ export const meSchema = z
       .boolean()
       .describe("Agent signed in with a temporary password and must change it first"),
     agent: agentSchema.nullable(),
+    tenant: z
+      .object({
+        id: z.uuid(),
+        name: z.string(),
+        legalName: z.string(),
+        logoUrl: z.string().nullable(),
+        insurers: z.array(
+          z.object({
+            id: z.uuid(),
+            code: z.string(),
+            name: z.string(),
+            businessCode: z.string(),
+            licenceCode: z.string(),
+          }),
+        ),
+      })
+      .nullable()
+      .describe("The user's tenant; null for platform Super Admins"),
   })
   .meta({ id: "CurrentUser" });
 
@@ -31,6 +49,19 @@ export const toMeDto = (user: CurrentUser): z.infer<typeof meSchema> => ({
   lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
   mustChangePassword: user.mustChangePassword,
   agent: user.agent ? toAgentDto(user.agent) : null,
+  tenant: user.tenant
+    ? {
+        id: user.tenant.id,
+        name: user.tenant.name,
+        legalName: user.tenant.legalName,
+        logoUrl: user.tenant.logoUrl,
+        insurers: user.tenant.insurers.map((link) => ({
+          ...link.insurer,
+          businessCode: link.businessCode,
+          licenceCode: link.licenceCode,
+        })),
+      }
+    : null,
 });
 
 export const authRoutes: FastifyPluginAsyncZod = async (app) => {
