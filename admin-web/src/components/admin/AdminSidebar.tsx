@@ -102,10 +102,10 @@ export function AdminSidebar({
             title={compact ? (me?.tenant?.name ?? "InsuroX") : undefined}
             className="flex items-center gap-2.5 transition-opacity hover:opacity-90"
           >
-            <TenantLogo logoUrl={me?.tenant?.logoUrl} name={me?.tenant?.name} />
+            <TenantLogo logoUrl={me?.tenant?.logoUrl} name={me?.tenant?.name} size="lg" />
             {!compact && (
               <div className="flex flex-col">
-                <span className="font-display text-lg font-extrabold tracking-tight leading-none">
+                <span className="font-display text-sm font-extrabold tracking-tight leading-tight">
                   {me?.tenant?.name ?? "InsuroX"}
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-primary">

@@ -48,10 +48,10 @@ export function AgentSidebar({ currentPath, isOpen, onClose }: AgentSidebarProps
             title={compact ? (user.tenant?.name ?? "InsuroX") : undefined}
             className="flex items-center gap-2.5 transition-opacity hover:opacity-90"
           >
-            <TenantLogo logoUrl={user.tenant?.logoUrl} name={user.tenant?.name} />
+            <TenantLogo logoUrl={user.tenant?.logoUrl} name={user.tenant?.name} size="lg" />
             {!compact && (
               <div className="flex flex-col">
-                <span className="font-display text-lg font-extrabold leading-none tracking-tight">
+                <span className="font-display text-sm font-extrabold leading-tight tracking-tight">
                   {user.tenant?.name ?? "InsuroX"}
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
