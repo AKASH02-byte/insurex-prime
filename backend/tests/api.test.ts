@@ -247,7 +247,8 @@ describe.skipIf(!hasTestDatabase)("InsuroX API (PostgreSQL integration)", () => 
     }
 
     it("1. signs in by agent code or email and sets a secure HttpOnly session cookie", async () => {
-      expect(agentATempPassword).toMatch(/^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/);
+      // Default password: first name (up to 5 letters) + "@" + normalized phone.
+      expect(agentATempPassword).toMatch(/^[A-Za-z]{1,5}@\d{10,}$/);
       for (const identifier of [
         agentACode,
         agentACode.toLowerCase(),
@@ -415,7 +416,8 @@ describe.skipIf(!hasTestDatabase)("InsuroX API (PostgreSQL integration)", () => 
       expect(data.summary).toEqual({
         customers: 1,
         policiesSold: 3,
-        activePolicies: 2,
+        // Every sale is in force straight away; only payment differs.
+        activePolicies: 3,
         totalPremium: 30000,
         premiumCollected: 20000,
         pendingPayments: 1,
@@ -577,7 +579,7 @@ describe.skipIf(!hasTestDatabase)("InsuroX API (PostgreSQL integration)", () => 
       // a client-supplied paymentStatus is ignored.
       const logged = await sell({ paymentStatus: "PAID" });
       expect(logged.status).toBe(201);
-      expect(logged.body.data).toMatchObject({ paymentStatus: "PENDING", policyStatus: "PENDING" });
+      expect(logged.body.data).toMatchObject({ paymentStatus: "PENDING", policyStatus: "ACTIVE" });
       expect(logged.body.data.receipts).toHaveLength(0);
       expect((await sell({ customerId: theirs.body.data.id })).status).toBe(404);
       expect(
@@ -595,7 +597,7 @@ describe.skipIf(!hasTestDatabase)("InsuroX API (PostgreSQL integration)", () => 
       expect((await sell({ issueDate: "2026-02-30" })).status).toBe(400);
       expect(
         (await sell({ policyStatus: "ACTIVE", paymentStatus: "PAID" })).body.data,
-      ).toMatchObject({ policyStatus: "PENDING", paymentStatus: "PENDING" });
+      ).toMatchObject({ policyStatus: "ACTIVE", paymentStatus: "PENDING" });
       await call("PATCH", `/customers/${mine.body.data.id}`, a, { status: "INACTIVE" });
       expect((await sell({})).status).toBe(409);
       expect(await db.soldPolicy.count({ where: { customerId: theirs.body.data.id } })).toBe(0);
@@ -812,7 +814,7 @@ describe.skipIf(!hasTestDatabase)("InsuroX API (PostgreSQL integration)", () => 
       expiryDate: computeExpiryDate(new Date(`${issueDate}T00:00:00Z`), 12)
         .toISOString()
         .slice(0, 10),
-      policyStatus: "PENDING",
+      policyStatus: "ACTIVE",
       paymentStatus: "PENDING",
     });
     expect(sale.body.data.agent.id).toBe(agentAId);
@@ -1131,13 +1133,13 @@ describe.skipIf(!hasTestDatabase)("InsuroX API (PostgreSQL integration)", () => 
       expect((await sale(AGENT_A)).status).toBe(201);
     });
 
-    it("applies default policy and payment status to new unpaid sales", async () => {
+    it("applies the default payment status to new unpaid sales", async () => {
       const customer = await call("POST", "/customers", AGENT_A, {
         fullName: "Cust",
         phone: "9444444444",
       });
       await call("PATCH", "/settings", SUPER, {
-        settings: { "policy.defaultPolicyStatus": "ACTIVE", "policy.defaultPaymentStatus": "DUE" },
+        settings: { "policy.defaultPaymentStatus": "DUE" },
       });
       const sale = await call("POST", "/sold-policies", AGENT_A, {
         policyId: activePolicyId,
