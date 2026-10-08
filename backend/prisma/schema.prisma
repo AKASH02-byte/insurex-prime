@@ -1,4 +1,4 @@
-// InsureX Prime — PostgreSQL schema.
+// InsuroX Prime — PostgreSQL schema.
 // Money is stored as DECIMAL; dates without a time component use DATE.
 
 generator client {
@@ -13,8 +13,16 @@ datasource db {
 }
 
 enum Role {
+  /// Platform operator: manages tenants and insurers; has no tenant of their own.
   SUPER_ADMIN
+  /// The single admin of one tenant (an agency attached to one insurer).
+  TENANT_ADMIN
   AGENT
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 enum UserStatus {
@@ -40,9 +48,12 @@ enum Gender {
   OTHER
 }
 
+/// The line of business a catalog policy belongs to.
 enum InsuranceType {
   HEALTH
   MOTOR
+  LIFE
+  COMMERCIAL
 }
 
 enum PolicyStatus {
@@ -81,6 +92,98 @@ enum PaymentMethod {
   CHEQUE
 }
 
+/// An insurance company (TATA AIG, TATA AIA, LIC, HDFC…). Platform-managed master data.
+model Insurer {
+  id        String   @id @default(uuid()) @db.Uuid
+  /// Stable machine code, e.g. TATA_AIA. Also selects the built-in catalog template.
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenantLinks TenantInsurer[]
+  categories  PolicyCategory[]
+  policies    Policy[]
+
+  @@map("insurers")
+}
+
+/// An agency (e.g. Aakruthi Enterprises). Everything it owns (agents, customers, catalog,
+/// sales, receipts, audit trail) is isolated by `tenantId`. An agency can sell for several
+/// insurers; each relationship (with its business and licence codes) is a TenantInsurer.
+model Tenant {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String
+  legalName    String
+  /// Agency logo as a small `data:image/...;base64` URL, shown to its admin and agents.
+  logoUrl      String?      @db.Text
+  contactEmail String?
+  contactPhone String?
+  /// Agency postal address, edited by the tenant admin.
+  address      String?      @db.Text
+  status       TenantStatus @default(ACTIVE)
+  activatedAt  DateTime     @default(now())
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  insurers   TenantInsurer[]
+  users      User[]
+  agents     Agent[]
+  customers  Customer[]
+  categories PolicyCategory[]
+  policies   Policy[]
+  sold       SoldPolicy[]
+  receipts   Receipt[]
+  auditLogs  AuditLog[]
+
+  @@index([status])
+  @@map("tenants")
+}
+
+/// The agency's licence with one insurer: the business and policy-selling licence codes the
+/// insurer issued to it.
+model TenantInsurer {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  insurerId    String   @db.Uuid
+  businessCode String
+  licenceCode  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  insurer Insurer @relation(fields: [insurerId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, insurerId])
+  @@unique([insurerId, businessCode])
+  @@index([tenantId])
+  @@map("tenant_insurers")
+}
+
+/// A node in a tenant's catalog tree below a line of business, e.g. LIFE → Savings
+/// Solutions, or HEALTH → Indemnity. Categories can nest through `parentId`.
+model PolicyCategory {
+  id        String        @id @default(uuid()) @db.Uuid
+  tenantId  String        @db.Uuid
+  insurerId String        @db.Uuid
+  line      InsuranceType
+  parentId  String?       @db.Uuid
+  name      String
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  insurer  Insurer          @relation(fields: [insurerId], references: [id], onDelete: Restrict)
+  parent   PolicyCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children PolicyCategory[] @relation("CategoryTree")
+  policies Policy[]
+
+  @@index([tenantId, insurerId, line, parentId])
+  @@map("policy_categories")
+}
+
 /// A person who can sign in. Identity comes from Firebase; role is decided here.
 model User {
   id                 String     @id @default(uuid()) @db.Uuid
@@ -96,20 +199,25 @@ model User {
   mustChangePassword Boolean    @default(false)
   passwordChangedAt  DateTime?
   lastLoginAt        DateTime?
+  /// Null for platform SUPER_ADMINs; set for TENANT_ADMIN and AGENT.
+  tenantId           String?    @db.Uuid
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
+  tenant          Tenant?         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   agent           Agent?
   auditLogs       AuditLog[]
   agentSessions   AgentSession[]
   updatedSettings SystemSetting[]
 
   @@index([role])
+  @@index([tenantId, role])
   @@map("users")
 }
 
 model Agent {
   id        String      @id @default(uuid()) @db.Uuid
+  tenantId  String      @db.Uuid
   userId    String      @unique @db.Uuid
   agentCode String      @unique
   fullName  String
@@ -120,10 +228,12 @@ model Agent {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   customers    Customer[]
   soldPolicies SoldPolicy[]
 
+  @@index([tenantId, status])
   @@index([status])
   @@index([fullName])
   @@map("agents")
@@ -131,6 +241,7 @@ model Agent {
 
 model Customer {
   id                  String         @id @default(uuid()) @db.Uuid
+  tenantId            String         @db.Uuid
   customerCode        String         @unique
   fullName            String
   dateOfBirth         DateTime?      @db.Date
@@ -147,9 +258,11 @@ model Customer {
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   assignedAgent Agent?       @relation(fields: [assignedAgentId], references: [id], onDelete: Restrict)
   soldPolicies  SoldPolicy[]
 
+  @@index([tenantId])
   @@index([assignedAgentId])
   @@index([status])
   @@index([fullName])
@@ -160,14 +273,21 @@ model Customer {
 /// A product in the catalog. Only ACTIVE policies can be sold by agents.
 model Policy {
   id               String           @id @default(uuid()) @db.Uuid
-  policyCode       String           @unique
+  tenantId         String           @db.Uuid
+  /// The insurer whose product this is (a tenant can sell for several).
+  insurerId        String           @db.Uuid
+  /// Optional position in the tenant's catalog tree (below the line of business).
+  categoryId       String?          @db.Uuid
+  policyCode       String
   policyName       String
   insuranceType    InsuranceType
   description      String           @default("")
-  coverageAmount   Decimal          @db.Decimal(14, 2)
-  premium          Decimal          @db.Decimal(12, 2)
-  premiumFrequency PremiumFrequency
-  durationMonths   Int
+  /// Catalog price/cover/term are optional: many insurer products are quoted on the
+  /// insurer's own portal, so the sale records the real figures.
+  coverageAmount   Decimal?         @db.Decimal(14, 2)
+  premium          Decimal?         @db.Decimal(12, 2)
+  premiumFrequency PremiumFrequency @default(ANNUAL)
+  durationMonths   Int?
   eligibility      String           @default("")
   benefits         String[]
   terms            String           @default("")
@@ -177,8 +297,14 @@ model Policy {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  insurer      Insurer         @relation(fields: [insurerId], references: [id], onDelete: Restrict)
+  category     PolicyCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   soldPolicies SoldPolicy[]
 
+  @@unique([tenantId, policyCode])
+  @@index([tenantId, insurerId, insuranceType, status])
+  @@index([categoryId])
   @@index([insuranceType, status])
   @@index([status])
   @@index([policyName])
@@ -186,25 +312,30 @@ model Policy {
 }
 
 model SoldPolicy {
-  id            String           @id @default(uuid()) @db.Uuid
-  policyNumber  String           @unique
-  policyId      String           @db.Uuid
-  customerId    String           @db.Uuid
-  agentId       String           @db.Uuid
+  id                  String           @id @default(uuid()) @db.Uuid
+  tenantId            String           @db.Uuid
+  policyNumber        String           @unique
+  /// The policy number issued by the insurer's own portal, when known.
+  insurerPolicyNumber String?
+  policyId            String           @db.Uuid
+  customerId          String           @db.Uuid
+  agentId             String           @db.Uuid
   /// Premium agreed at sale time; catalog prices can change later.
-  premium       Decimal          @db.Decimal(12, 2)
-  issueDate     DateTime         @db.Date
-  expiryDate    DateTime         @db.Date
-  paymentStatus PaymentStatus    @default(PENDING)
-  policyStatus  SoldPolicyStatus @default(PENDING)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  premium             Decimal          @db.Decimal(12, 2)
+  issueDate           DateTime         @db.Date
+  expiryDate          DateTime         @db.Date
+  paymentStatus       PaymentStatus    @default(PENDING)
+  policyStatus        SoldPolicyStatus @default(PENDING)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   policy   Policy    @relation(fields: [policyId], references: [id], onDelete: Restrict)
   customer Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
   agent    Agent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
   receipts Receipt[]
 
+  @@index([tenantId, issueDate])
   @@index([agentId, issueDate])
   @@index([agentId, expiryDate])
   @@index([customerId])
@@ -217,6 +348,7 @@ model SoldPolicy {
 
 model Receipt {
   id            String        @id @default(uuid()) @db.Uuid
+  tenantId      String        @db.Uuid
   receiptNumber String        @unique
   soldPolicyId  String        @db.Uuid
   amount        Decimal       @db.Decimal(12, 2)
@@ -224,8 +356,10 @@ model Receipt {
   paymentStatus PaymentStatus @default(PAID)
   issuedAt      DateTime      @default(now())
 
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   soldPolicy SoldPolicy @relation(fields: [soldPolicyId], references: [id], onDelete: Restrict)
 
+  @@index([tenantId])
   @@index([soldPolicyId])
   @@index([issuedAt])
   @@map("receipts")
@@ -252,6 +386,8 @@ model AgentSession {
 
 model AuditLog {
   id        String   @id @default(uuid()) @db.Uuid
+  /// Null for platform-level actions (tenant activation, insurers).
+  tenantId  String?  @db.Uuid
   userId    String?  @db.Uuid
   action    String
   entity    String
@@ -262,8 +398,10 @@ model AuditLog {
   requestId String?
   createdAt DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([tenantId, createdAt])
   @@index([entity, entityId])
   @@index([userId])
   @@index([action])

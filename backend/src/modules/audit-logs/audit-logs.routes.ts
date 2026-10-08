@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { Prisma } from "../../generated/prisma/client.js";
-import { requireRole } from "../../middleware/role.js";
+import { requireAuth, tenantAdminOnly } from "../../middleware/role.js";
 import {
   buildMeta,
   dateRangeQuerySchema,
@@ -48,7 +48,7 @@ export const auditLogRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
     "",
     {
-      preHandler: requireRole("SUPER_ADMIN"),
+      preHandler: tenantAdminOnly,
       schema: {
         tags: ["Audit Logs"],
         security: [{ bearerAuth: [] }],
@@ -60,16 +60,19 @@ export const auditLogRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const query = request.query;
       const createdAt = toDateFilter(query);
+      const tenantId = requireAuth(request).tenantId;
       const where: Prisma.AuditLogWhereInput = {
+        // A tenant admin (or a platform admin acting in a tenant) only sees that tenant's trail.
+        ...(tenantId ? { tenantId } : {}),
         ...(query.userId ? { userId: query.userId } : {}),
         ...(query.action ? { action: query.action } : {}),
         ...(query.entity ? { entity: query.entity } : {}),
         ...(query.entityId ? { entityId: query.entityId } : {}),
         ...(createdAt ? { createdAt } : {}),
       };
-      const [total, logs] = await app.db.$transaction([
-        app.db.auditLog.count({ where }),
-        app.db.auditLog.findMany({
+      const [total, logs] = await request.db.$transaction([
+        request.db.auditLog.count({ where }),
+        request.db.auditLog.findMany({
           where,
           include: { user: { select: { id: true, email: true, role: true } } },
           orderBy: [{ createdAt: query.order }, { id: "asc" }],

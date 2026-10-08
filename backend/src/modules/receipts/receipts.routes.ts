@@ -35,7 +35,7 @@ export const receiptRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { items, meta } = await listReceipts(app.db, requireAuth(request), request.query);
+      const { items, meta } = await listReceipts(request.db, requireAuth(request), request.query);
       return paginated(items, meta);
     },
   );
@@ -51,7 +51,7 @@ export const receiptRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(receiptSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getReceipt(app.db, requireAuth(request), request.params.id)),
+    async (request) => ok(await getReceipt(request.db, requireAuth(request), request.params.id)),
   );
 
   app.post(
@@ -70,6 +70,6 @@ export const receiptRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) =>
       reply
         .code(201)
-        .send(ok(await createReceipt(app.db, requireAuth(request), request, request.body))),
+        .send(ok(await createReceipt(request.db, requireAuth(request), request, request.body))),
   );
 };

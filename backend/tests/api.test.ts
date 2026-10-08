@@ -7,12 +7,16 @@ import {
   createTestApp,
   hasTestDatabase,
   resetDatabase,
+  seedTenant,
   SUPER_ADMIN_EMAIL,
+  TENANT_ADMIN_EMAIL,
   TEST_DATABASE_URL,
   tokenFor,
 } from "./helpers.js";
 
-const ADMIN = bearer(tokenFor("uid-admin", SUPER_ADMIN_EMAIL));
+/** The tenant's single admin (pre-provisioned); the platform Super Admin is SUPER. */
+const ADMIN = bearer(tokenFor("uid-admin", TENANT_ADMIN_EMAIL));
+const SUPER = bearer(tokenFor("uid-super", SUPER_ADMIN_EMAIL));
 const AGENT_A_EMAIL = "agent.a@test.example.com";
 const AGENT_B_EMAIL = "agent.b@test.example.com";
 const AGENT_A = bearer(tokenFor("uid-agent-a", AGENT_A_EMAIL));
@@ -50,11 +54,12 @@ const healthPolicy = {
   },
 };
 
-describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => {
+describe.skipIf(!hasTestDatabase)("InsuroX API (PostgreSQL integration)", () => {
   let app: App;
   let db: Database;
 
   // Shared fixtures created in beforeEach.
+  let tenantId: string;
   let agentAId: string;
   let agentBId: string;
   let agentACode: string;
@@ -89,6 +94,9 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
 
   beforeEach(async () => {
     await resetDatabase(db);
+    ({
+      tenant: { id: tenantId },
+    } = await seedTenant(db));
 
     const agentA = await call("POST", "/agents", ADMIN, {
       fullName: "Agent A",
@@ -190,10 +198,15 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
     expect(await db.user.count({ where: { email: "stranger@example.com" } })).toBe(0);
   });
 
-  it("bootstraps the super admin and links agents by email on first sign-in", async () => {
+  it("bootstraps the super admin and links tenant admins and agents by email on first sign-in", async () => {
+    const platform = await call("POST", "/auth/verify", SUPER);
+    expect(platform.status).toBe(200);
+    expect(platform.body.data).toMatchObject({ role: "SUPER_ADMIN", agent: null, tenant: null });
+
     const admin = await call("POST", "/auth/verify", ADMIN);
     expect(admin.status).toBe(200);
-    expect(admin.body.data).toMatchObject({ role: "SUPER_ADMIN", agent: null });
+    expect(admin.body.data).toMatchObject({ role: "TENANT_ADMIN", agent: null });
+    expect(admin.body.data.tenant).toMatchObject({ id: tenantId, name: "Test Agency" });
 
     const agent = await call("POST", "/auth/verify", AGENT_A);
     expect(agent.status).toBe(200);
@@ -234,7 +247,8 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
     }
 
     it("1. signs in by agent code or email and sets a secure HttpOnly session cookie", async () => {
-      expect(agentATempPassword).toMatch(/^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/);
+      // Default password: first name (up to 5 letters) + "@" + normalized phone.
+      expect(agentATempPassword).toMatch(/^[A-Za-z]{1,5}@\d{10,}$/);
       for (const identifier of [
         agentACode,
         agentACode.toLowerCase(),
@@ -402,7 +416,8 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       expect(data.summary).toEqual({
         customers: 1,
         policiesSold: 3,
-        activePolicies: 2,
+        // Every sale is in force straight away; only payment differs.
+        activePolicies: 3,
         totalPremium: 30000,
         premiumCollected: 20000,
         pendingPayments: 1,
@@ -497,7 +512,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       expect((await call("DELETE", `/policies/${activePolicyId}`, a)).status).toBe(403);
       const policy = await db.policy.findUniqueOrThrow({ where: { id: activePolicyId } });
       expect(policy).toMatchObject({ status: "ACTIVE" });
-      expect(policy.premium.toNumber()).toBe(10000);
+      expect(policy.premium!.toNumber()).toBe(10000);
     });
 
     it("11–12. sells to own customers with server-side premium, expiry, number and receipt", async () => {
@@ -560,17 +575,12 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
           ...body,
         });
       expect((await sell({ premium: 1 })).status).toBe(403);
-      // Offline sales record their payment state without a receipt.
-      for (const [paymentStatus, policyStatus] of [
-        ["DUE", "PENDING"],
-        ["PENDING", "PENDING"],
-        ["PAID", "ACTIVE"],
-      ] as const) {
-        const logged = await sell({ paymentStatus });
-        expect(logged.status).toBe(201);
-        expect(logged.body.data).toMatchObject({ paymentStatus, policyStatus });
-        expect(logged.body.data.receipts).toHaveLength(0);
-      }
+      // Offline sales take the default payment state from settings and create no receipt;
+      // a client-supplied paymentStatus is ignored.
+      const logged = await sell({ paymentStatus: "PAID" });
+      expect(logged.status).toBe(201);
+      expect(logged.body.data).toMatchObject({ paymentStatus: "PENDING", policyStatus: "ACTIVE" });
+      expect(logged.body.data.receipts).toHaveLength(0);
       expect((await sell({ customerId: theirs.body.data.id })).status).toBe(404);
       expect(
         (
@@ -587,7 +597,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       expect((await sell({ issueDate: "2026-02-30" })).status).toBe(400);
       expect(
         (await sell({ policyStatus: "ACTIVE", paymentStatus: "PAID" })).body.data,
-      ).toMatchObject({ policyStatus: "PENDING", paymentStatus: "PENDING" });
+      ).toMatchObject({ policyStatus: "ACTIVE", paymentStatus: "PENDING" });
       await call("PATCH", `/customers/${mine.body.data.id}`, a, { status: "INACTIVE" });
       expect((await sell({})).status).toBe(409);
       expect(await db.soldPolicy.count({ where: { customerId: theirs.body.data.id } })).toBe(0);
@@ -651,10 +661,10 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       expect((await call("POST", "/auth/agent/logout", FRONTEND)).status).toBe(200);
     });
 
-    it("16. keeps Super Admin Google sign-in working alongside agent cookies", async () => {
+    it("16. keeps tenant admin Google sign-in working alongside agent cookies", async () => {
       const admin = await call("POST", "/auth/verify", ADMIN);
       expect(admin.status).toBe(200);
-      expect(admin.body.data).toMatchObject({ role: "SUPER_ADMIN", mustChangePassword: false });
+      expect(admin.body.data).toMatchObject({ role: "TENANT_ADMIN", mustChangePassword: false });
 
       const a = await activeSession(agentACode, agentATempPassword);
       await call("POST", "/customers", a, { fullName: "Mine", phone: "9777777777" });
@@ -662,7 +672,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       const both = await call("GET", "/customers", { ...a, ...ADMIN });
       expect(both.status).toBe(200);
       expect((await call("GET", "/auth/me", { ...a, ...ADMIN })).body.data.role).toBe(
-        "SUPER_ADMIN",
+        "TENANT_ADMIN",
       );
       expect((await call("GET", "/agents", ADMIN)).body.meta.total).toBe(2);
       expect((await call("GET", "/agents", a)).status).toBe(403);
@@ -804,7 +814,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       expiryDate: computeExpiryDate(new Date(`${issueDate}T00:00:00Z`), 12)
         .toISOString()
         .slice(0, 10),
-      policyStatus: "PENDING",
+      policyStatus: "ACTIVE",
       paymentStatus: "PENDING",
     });
     expect(sale.body.data.agent.id).toBe(agentAId);
@@ -1015,7 +1025,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
   // ─── Settings ───────────────────────────────────────────────────────────────
   describe("system settings", () => {
     it("lets a Super Admin read defaults without any stored rows", async () => {
-      const { status, body } = await call("GET", "/settings", ADMIN);
+      const { status, body } = await call("GET", "/settings", SUPER);
       expect(status).toBe(200);
       const byKey = Object.fromEntries(
         body.data.items.map((item: { key: string; value: unknown }) => [item.key, item.value]),
@@ -1026,7 +1036,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
     });
 
     it("persists updates (visible on the next read) and audits them", async () => {
-      const update = await call("PATCH", "/settings", ADMIN, {
+      const update = await call("PATCH", "/settings", SUPER, {
         settings: {
           "general.companyName": "Acme Insurance",
           "notifications.emailEnabled": false,
@@ -1034,7 +1044,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
         },
       });
       expect(update.status).toBe(200);
-      const again = await call("GET", "/settings", ADMIN);
+      const again = await call("GET", "/settings", SUPER);
       const byKey = Object.fromEntries(
         again.body.data.items.map((item: { key: string; value: unknown }) => [
           item.key,
@@ -1066,7 +1076,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
         { "policy.defaultRenewalReminderDays": 0 },
         {},
       ]) {
-        const { status } = await call("PATCH", "/settings", ADMIN, { settings });
+        const { status } = await call("PATCH", "/settings", SUPER, { settings });
         expect(status).toBe(400);
       }
       expect(await db.systemSetting.count()).toBe(0);
@@ -1088,7 +1098,7 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
       expect(health.status).toBe(200);
       expect(health.body.data.database).toBe("up");
 
-      const { status, body } = await call("GET", "/settings/health", ADMIN);
+      const { status, body } = await call("GET", "/settings/health", SUPER);
       expect(status).toBe(200);
       expect(body.data.database).toBe("up");
       expect(body.data.configuration.firebase).toBe("configured");
@@ -1111,25 +1121,25 @@ describe.skipIf(!hasTestDatabase)("InsureX API (PostgreSQL integration)", () => 
           customerId: customer.body.data.id,
         });
 
-      await call("PATCH", "/settings", ADMIN, { settings: { "policy.allowAgentSales": false } });
+      await call("PATCH", "/settings", SUPER, { settings: { "policy.allowAgentSales": false } });
       const blocked = await sale(AGENT_A);
       expect(blocked.status).toBe(403);
       expect(blocked.body.error.code).toBe("FORBIDDEN");
       expect(await db.soldPolicy.count()).toBe(0);
-      // Super Admin can still record sales.
+      // The tenant admin can still record sales.
       expect((await sale(ADMIN)).status).toBe(201);
 
-      await call("PATCH", "/settings", ADMIN, { settings: { "policy.allowAgentSales": true } });
+      await call("PATCH", "/settings", SUPER, { settings: { "policy.allowAgentSales": true } });
       expect((await sale(AGENT_A)).status).toBe(201);
     });
 
-    it("applies default policy and payment status to new unpaid sales", async () => {
+    it("applies the default payment status to new unpaid sales", async () => {
       const customer = await call("POST", "/customers", AGENT_A, {
         fullName: "Cust",
         phone: "9444444444",
       });
-      await call("PATCH", "/settings", ADMIN, {
-        settings: { "policy.defaultPolicyStatus": "ACTIVE", "policy.defaultPaymentStatus": "DUE" },
+      await call("PATCH", "/settings", SUPER, {
+        settings: { "policy.defaultPaymentStatus": "DUE" },
       });
       const sale = await call("POST", "/sold-policies", AGENT_A, {
         policyId: activePolicyId,

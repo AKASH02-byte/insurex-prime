@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { requireRole } from "../../middleware/role.js";
+import { requireAuth, requireTenantId, tenantAdminOnly } from "../../middleware/role.js";
 import { buildMeta, toSkipTake } from "../../utils/pagination.js";
 import {
   errorResponses,
@@ -30,7 +30,7 @@ const tags = ["Reports"];
 
 export const reportRoutes: FastifyPluginAsyncZod = async (app) => {
   app.addHook("onRequest", app.authenticate);
-  app.addHook("preHandler", requireRole("SUPER_ADMIN"));
+  app.addHook("preHandler", tenantAdminOnly);
 
   app.get(
     "/sales",
@@ -47,12 +47,15 @@ export const reportRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const query = request.query;
-      const scope = { agentId: query.agentId ?? null };
+      const scope = {
+        tenantId: requireTenantId(requireAuth(request)),
+        agentId: query.agentId ?? null,
+      };
       const [summary, timeline, byType, breakdown] = await Promise.all([
-        getSummary(app.db, scope, query),
-        getSalesOverTime(app.db, scope, query),
-        getPolicyDistribution(app.db, scope, query),
-        getSalesBreakdown(app.db, query),
+        getSummary(request.db, scope, query),
+        getSalesOverTime(request.db, scope, query),
+        getPolicyDistribution(request.db, scope, query),
+        getSalesBreakdown(request.db, query),
       ]);
       return ok({ summary, timeline, byType, ...breakdown });
     },
@@ -71,11 +74,15 @@ export const reportRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const { skip, take } = toSkipTake(request.query);
-      const { items, total } = await getPolicyPerformance(app.db, {
-        ...request.query,
-        limit: take,
-        offset: skip,
-      });
+      const { items, total } = await getPolicyPerformance(
+        request.db,
+        requireTenantId(requireAuth(request)),
+        {
+          ...request.query,
+          limit: take,
+          offset: skip,
+        },
+      );
       return paginated(items, buildMeta(request.query.page, request.query.limit, total));
     },
   );
@@ -94,8 +101,8 @@ export const reportRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const { skip, take } = toSkipTake(request.query);
       const { items, total } = await getAgentPerformance(
-        app.db,
-        { agentId: null },
+        request.db,
+        { tenantId: requireTenantId(requireAuth(request)), agentId: null },
         { ...request.query, limit: take, offset: skip },
       );
       return paginated(items, buildMeta(request.query.page, request.query.limit, total));

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { requireAuth, requireRole } from "../../middleware/role.js";
+import { requireAuth, tenantAdminOnly } from "../../middleware/role.js";
 import {
   errorResponses,
   ok,
@@ -25,7 +25,7 @@ import {
   updatePolicy,
 } from "./policies.service.js";
 
-const adminOnly = requireRole("SUPER_ADMIN");
+const adminOnly = tenantAdminOnly;
 const security = [{ bearerAuth: [] }];
 const tags = ["Policies"];
 
@@ -46,7 +46,7 @@ export const policyRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { items, meta } = await listPolicies(app.db, requireAuth(request), request.query);
+      const { items, meta } = await listPolicies(request.db, requireAuth(request), request.query);
       return paginated(items, meta);
     },
   );
@@ -63,7 +63,7 @@ export const policyRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(policySchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getPolicy(app.db, requireAuth(request), request.params.id)),
+    async (request) => ok(await getPolicy(request.db, requireAuth(request), request.params.id)),
   );
 
   app.post(
@@ -79,7 +79,7 @@ export const policyRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) =>
-      reply.code(201).send(ok(await createPolicy(app.db, request, request.body))),
+      reply.code(201).send(ok(await createPolicy(request.db, request, request.body))),
   );
 
   app.patch(
@@ -96,7 +96,7 @@ export const policyRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(policySchema), ...errorResponses },
       },
     },
-    async (request) => ok(await updatePolicy(app.db, request, request.params.id, request.body)),
+    async (request) => ok(await updatePolicy(request.db, request, request.params.id, request.body)),
   );
 
   app.patch(
@@ -114,7 +114,7 @@ export const policyRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) =>
-      ok(await setPolicyStatus(app.db, request, request.params.id, request.body.status)),
+      ok(await setPolicyStatus(request.db, request, request.params.id, request.body.status)),
   );
 
   app.delete(
@@ -131,7 +131,7 @@ export const policyRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      await deletePolicy(app.db, request, request.params.id);
+      await deletePolicy(request.db, request, request.params.id);
       return ok({ id: request.params.id });
     },
   );

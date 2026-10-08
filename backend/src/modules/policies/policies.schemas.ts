@@ -44,10 +44,17 @@ export const policySchema = z
     policyName: z.string(),
     insuranceType: z.enum(InsuranceType),
     description: z.string(),
-    coverageAmount: z.number(),
-    premium: z.number(),
+    insurerId: z.uuid(),
+    insurer: z.object({ id: z.uuid(), code: z.string(), name: z.string() }),
+    categoryId: z.uuid().nullable(),
+    category: z
+      .object({ id: z.uuid(), name: z.string() })
+      .nullable()
+      .describe("Direct category in the tenant catalog tree"),
+    coverageAmount: z.number().nullable(),
+    premium: z.number().nullable().describe("Null when the sale is priced on the insurer's portal"),
     premiumFrequency: z.enum(PremiumFrequency),
-    durationMonths: z.number().int(),
+    durationMonths: z.number().int().nullable(),
     eligibility: z.string(),
     benefits: z.array(z.string()),
     terms: z.string(),
@@ -67,7 +74,9 @@ export const listPoliciesQuerySchema = paginationQuerySchema
   .extend(dateRangeQuerySchema.shape)
   .extend({
     insuranceType: z.enum(InsuranceType).optional(),
-    status: z.enum(PolicyStatus).optional().describe("SUPER_ADMIN only; agents always get ACTIVE"),
+    insurerId: z.uuid().optional().describe("Only this insurer's policies"),
+    categoryId: z.uuid().optional().describe("Only policies directly in this category"),
+    status: z.enum(PolicyStatus).optional().describe("Admins only; agents always get ACTIVE"),
     premiumFrequency: z.enum(PremiumFrequency).optional(),
     premiumMin: z.coerce.number().min(0).optional(),
     premiumMax: z.coerce.number().min(0).optional(),
@@ -83,19 +92,26 @@ export const listPoliciesQuerySchema = paginationQuerySchema
     { message: "premiumMin must not exceed premiumMax", path: ["premiumMin"] },
   );
 
+export const policyCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9-]{3,30}$/, "use 3–30 letters, digits or dashes");
+
 const policyFields = {
-  policyCode: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9-]{3,30}$/, "use 3–30 letters, digits or dashes"),
+  policyCode: policyCodeSchema,
   policyName: z.string().trim().min(2).max(120),
   insuranceType: z.enum(InsuranceType),
   description: z.string().trim().max(2000).default(""),
-  coverageAmount: z.number().positive().max(1e12),
-  premium: z.number().positive().max(1e10),
+  insurerId: z
+    .uuid()
+    .optional()
+    .describe("Required when the tenant sells for more than one insurer"),
+  categoryId: z.uuid().nullable().optional().describe("Category in this tenant's catalog tree"),
+  coverageAmount: z.number().positive().max(1e12).nullable().optional(),
+  premium: z.number().positive().max(1e10).nullable().optional(),
   premiumFrequency: z.enum(PremiumFrequency).default("ANNUAL"),
-  durationMonths: z.number().int().min(1).max(600),
+  durationMonths: z.number().int().min(1).max(600).nullable().optional(),
   eligibility: z.string().trim().max(1000).default(""),
   benefits: z.array(z.string().trim().min(1).max(200)).max(30).default([]),
   terms: z.string().trim().max(5000).default(""),

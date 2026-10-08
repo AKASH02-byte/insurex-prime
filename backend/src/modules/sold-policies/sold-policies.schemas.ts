@@ -31,6 +31,10 @@ export const soldPolicySchema = z
   .object({
     id: z.uuid(),
     policyNumber: z.string(),
+    insurerPolicyNumber: z
+      .string()
+      .nullable()
+      .describe("Policy number on the insurer's own portal"),
     policy: policyRefSchema,
     customer: customerRefSchema,
     agent: agentRefSchema,
@@ -89,13 +93,22 @@ export const createSoldPolicyBodySchema = z.object({
     .positive()
     .max(1e10)
     .optional()
-    .describe("SUPER_ADMIN only override; defaults to the catalog premium. Agents get 403."),
-  paymentStatus: z
-    .enum(["PAID", "PENDING", "DUE"])
+    .describe(
+      "Defaults to the catalog premium. Required when the policy has no catalog premium (the sale is priced on the insurer's portal); otherwise only admins may override it.",
+    ),
+  expiryDate: z.iso
+    .date()
     .optional()
     .describe(
-      "Payment state of an offline sale being recorded. PAID starts the policy ACTIVE without creating a receipt. Ignored when paymentMethod is given (that always records a PAID receipt).",
+      "YYYY-MM-DD. Required when the policy has no catalog duration; otherwise only admins may override the computed date.",
     ),
+  insurerPolicyNumber: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .optional()
+    .describe("Policy number issued by the insurer's portal, if already known"),
   paymentMethod: z
     .enum(PaymentMethod)
     .optional()
@@ -108,15 +121,17 @@ export const quoteSoldPolicyQuerySchema = z.object({
   policyId: z.uuid(),
   customerId: z.uuid(),
   issueDate: z.iso.date().optional().describe("YYYY-MM-DD; defaults to today"),
-  agentId: z.uuid().optional().describe("SUPER_ADMIN only"),
+  agentId: z.uuid().optional().describe("Admins only"),
+  premium: z.coerce.number().positive().max(1e10).optional(),
+  expiryDate: z.iso.date().optional(),
 });
 
 export const soldPolicyQuoteSchema = z
   .object({
     policy: policyRefSchema.extend({
-      coverageAmount: z.number(),
+      coverageAmount: z.number().nullable(),
       premiumFrequency: z.enum(PremiumFrequency),
-      durationMonths: z.number().int(),
+      durationMonths: z.number().int().nullable(),
     }),
     customer: customerRefSchema,
     premium: z.number(),

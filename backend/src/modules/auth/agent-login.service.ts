@@ -42,8 +42,11 @@ export async function findAgentLoginUser(db: Database, identifier: AgentIdentifi
   } else {
     user = await byAgentCode(identifier.value);
   }
-  // Only AGENT accounts can use password sign-in; Super Admins use Google.
-  if (!user || user.role !== "AGENT" || !user.agent) return null;
+  if (!user) return null;
+  // Tenant admins sign in with the email + password issued when their tenant was activated.
+  if (user.role === "TENANT_ADMIN") return identifier.kind === "email" ? user : null;
+  // Other password sign-in is for AGENT accounts; platform Super Admins use Google or the admin ID.
+  if (user.role !== "AGENT" || !user.agent) return null;
   return user;
 }
 

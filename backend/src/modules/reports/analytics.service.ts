@@ -8,6 +8,8 @@ import { soldPolicyInclude, toSoldPolicyDto } from "../sold-policies/sold-polici
 
 /** Restricts analytics to one agent (AGENT callers) or everything (null). */
 export interface AnalyticsScope {
+  /** The tenant every figure is restricted to. Raw SQL below filters on it explicitly. */
+  tenantId: string;
   agentId: string | null;
 }
 
@@ -44,7 +46,10 @@ function soldPolicyConditions(
   bounds: SqlBounds,
   extra: { insuranceType?: InsuranceType | undefined; agentId?: string | undefined } = {},
 ) {
-  const conditions: Prisma.Sql[] = [Prisma.sql`sp."policyStatus"::text <> 'CANCELLED'`];
+  const conditions: Prisma.Sql[] = [
+    Prisma.sql`sp."tenantId" = ${scope.tenantId}::uuid`,
+    Prisma.sql`sp."policyStatus"::text <> 'CANCELLED'`,
+  ];
   const agentId = scope.agentId ?? extra.agentId;
   if (agentId) conditions.push(Prisma.sql`sp."agentId" = ${agentId}::uuid`);
   if (bounds.fromDate) conditions.push(Prisma.sql`sp."issueDate" >= ${bounds.fromDate}::date`);
@@ -195,7 +200,12 @@ export async function getPolicyDistribution(
     WHERE ${where}
     GROUP BY 1`;
   const total = rows.reduce((sum, row) => sum + row.count, 0);
-  return (["HEALTH", "MOTOR"] as const).map((insuranceType) => {
+  // HEALTH and MOTOR are always listed; LIFE and COMMERCIAL only once they have sales.
+  const lines = (["HEALTH", "MOTOR", "LIFE", "COMMERCIAL"] as const).filter(
+    (line) =>
+      line === "HEALTH" || line === "MOTOR" || rows.some((row) => row.insuranceType === line),
+  );
+  return lines.map((insuranceType) => {
     const row = rows.find((item) => item.insuranceType === insuranceType);
     const count = row?.count ?? 0;
     return {
@@ -203,6 +213,45 @@ export async function getPolicyDistribution(
       policiesSold: count,
       premium: num(row?.premium),
       percentage: total ? Math.round((count / total) * 1000) / 10 : 0,
+    };
+  });
+}
+
+// ─── Portfolio summary ────────────────────────────────────────────────────────
+/**
+ * Sold policies per insurance line by status (cancelled excluded). HEALTH and MOTOR are
+ * always listed; LIFE and COMMERCIAL appear once they have sales.
+ */
+export async function getPortfolioSummary(
+  db: Database,
+  scope: AnalyticsScope,
+  range: DateRangeInput,
+) {
+  const where = soldPolicyConditions(scope, toSqlBounds(range));
+  const rows = await db.$queryRaw<
+    { insuranceType: InsuranceType; status: string; count: number; premium: string }[]
+  >`
+    SELECT p."insuranceType"::text AS "insuranceType",
+           sp."policyStatus"::text AS status,
+           COUNT(*)::int AS count,
+           COALESCE(SUM(sp.premium), 0)::text AS premium
+    FROM sold_policies sp
+    JOIN policies p ON p.id = sp."policyId"
+    WHERE ${where}
+    GROUP BY 1, 2`;
+  const lines = (["HEALTH", "MOTOR", "LIFE", "COMMERCIAL"] as const).filter(
+    (line) => line === "HEALTH" || line === "MOTOR" || rows.some((row) => row.insuranceType === line),
+  );
+  return lines.map((insuranceType) => {
+    const own = rows.filter((row) => row.insuranceType === insuranceType);
+    const count = (status: string) => own.find((row) => row.status === status)?.count ?? 0;
+    return {
+      insuranceType,
+      total: own.reduce((sum, row) => sum + row.count, 0),
+      active: count("ACTIVE"),
+      pending: count("PENDING"),
+      expired: count("EXPIRED"),
+      totalPremium: own.reduce((sum, row) => sum + num(row.premium), 0),
     };
   });
 }
@@ -226,15 +275,18 @@ export async function getAgentPerformance(
   },
 ) {
   const bounds = toSqlBounds(options);
-  const soldWhere = soldPolicyConditions({ agentId: null }, bounds);
-  const receiptConditions: Prisma.Sql[] = [Prisma.sql`r."paymentStatus"::text = 'PAID'`];
+  const soldWhere = soldPolicyConditions({ tenantId: scope.tenantId, agentId: null }, bounds);
+  const receiptConditions: Prisma.Sql[] = [
+    Prisma.sql`r."tenantId" = ${scope.tenantId}::uuid`,
+    Prisma.sql`r."paymentStatus"::text = 'PAID'`,
+  ];
   if (bounds.fromDate) {
     receiptConditions.push(Prisma.sql`r."issuedAt" >= ${bounds.fromDate}::date::timestamp`);
   }
   if (bounds.toDateExclusive) {
     receiptConditions.push(Prisma.sql`r."issuedAt" < ${bounds.toDateExclusive}::date::timestamp`);
   }
-  const agentConditions: Prisma.Sql[] = [Prisma.sql`TRUE`];
+  const agentConditions: Prisma.Sql[] = [Prisma.sql`a."tenantId" = ${scope.tenantId}::uuid`];
   if (scope.agentId) agentConditions.push(Prisma.sql`a.id = ${scope.agentId}::uuid`);
   if (options.status) agentConditions.push(Prisma.sql`a.status::text = ${options.status}`);
   const agentWhere = Prisma.join(agentConditions, " AND ");
@@ -271,6 +323,7 @@ export async function getAgentPerformance(
       LEFT JOIN (
         SELECT "assignedAgentId", COUNT(*) AS customers
         FROM customers
+        WHERE "tenantId" = ${scope.tenantId}::uuid
         GROUP BY "assignedAgentId"
       ) c ON c."assignedAgentId" = a.id
       LEFT JOIN (
@@ -324,6 +377,7 @@ const POLICY_SORT: Record<string, Prisma.Sql> = {
 
 export async function getPolicyPerformance(
   db: Database,
+  tenantId: string,
   options: DateRangeInput & {
     limit: number;
     offset: number;
@@ -333,12 +387,15 @@ export async function getPolicyPerformance(
   },
 ) {
   const bounds = toSqlBounds(options);
-  const soldConditions: Prisma.Sql[] = [Prisma.sql`sp."policyStatus"::text <> 'CANCELLED'`];
+  const soldConditions: Prisma.Sql[] = [
+    Prisma.sql`sp."tenantId" = ${tenantId}::uuid`,
+    Prisma.sql`sp."policyStatus"::text <> 'CANCELLED'`,
+  ];
   if (bounds.fromDate) soldConditions.push(Prisma.sql`sp."issueDate" >= ${bounds.fromDate}::date`);
   if (bounds.toDateExclusive) {
     soldConditions.push(Prisma.sql`sp."issueDate" < ${bounds.toDateExclusive}::date`);
   }
-  const policyConditions: Prisma.Sql[] = [Prisma.sql`TRUE`];
+  const policyConditions: Prisma.Sql[] = [Prisma.sql`p."tenantId" = ${tenantId}::uuid`];
   if (options.insuranceType) {
     policyConditions.push(Prisma.sql`p."insuranceType"::text = ${options.insuranceType}`);
   }
@@ -360,7 +417,7 @@ export async function getPolicyPerformance(
     >`
       SELECT p.id AS "policyId", p."policyCode", p."policyName",
              p."insuranceType"::text AS "insuranceType", p.status::text AS status,
-             p.premium::text AS premium,
+             COALESCE(p.premium, 0)::text AS premium,
              COALESCE(s.sold, 0)::int AS "policiesSold",
              COALESCE(s.premium, 0)::text AS "totalPremium"
       FROM policies p

@@ -4,13 +4,17 @@ import { agentRoutes } from "../modules/agents/agents.routes.js";
 import { auditLogRoutes } from "../modules/audit-logs/audit-logs.routes.js";
 import { adminLoginRoutes } from "../modules/auth/admin-login.routes.js";
 import { agentLoginRoutes } from "../modules/auth/agent-login.routes.js";
+import { passwordResetRoutes } from "../modules/auth/password-reset.routes.js";
 import { authRoutes } from "../modules/auth/auth.routes.js";
+import { catalogRoutes } from "../modules/catalog/catalog.routes.js";
 import { customerRoutes } from "../modules/customers/customers.routes.js";
+import { platformRoutes } from "../modules/platform/platform.routes.js";
 import { policyRoutes } from "../modules/policies/policies.routes.js";
 import { receiptRoutes } from "../modules/receipts/receipts.routes.js";
 import { dashboardRoutes } from "../modules/reports/dashboard.routes.js";
 import { reportRoutes } from "../modules/reports/reports.routes.js";
 import { settingsRoutes } from "../modules/settings/settings.routes.js";
+import { tenantProfileRoutes } from "../modules/tenant-profile/tenant-profile.routes.js";
 import { soldPolicyRoutes } from "../modules/sold-policies/sold-policies.routes.js";
 import { healthRoutes } from "./health.js";
 
@@ -23,6 +27,9 @@ export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(authRoutes, { prefix: "/auth" });
   await app.register(agentLoginRoutes, { prefix: "/auth/agent" });
   await app.register(adminLoginRoutes, { prefix: "/auth/admin" });
+  await app.register(passwordResetRoutes, { prefix: "/auth/password-reset" });
+  await app.register(platformRoutes, { prefix: "/platform" });
+  await app.register(catalogRoutes, { prefix: "/catalog" });
   await app.register(agentRoutes, { prefix: "/agents" });
   await app.register(agentPortalRoutes, { prefix: "/agent" });
   await app.register(customerRoutes, { prefix: "/customers" });
@@ -33,4 +40,5 @@ export const registerRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(reportRoutes, { prefix: "/reports" });
   await app.register(auditLogRoutes, { prefix: "/audit-logs" });
   await app.register(settingsRoutes, { prefix: "/settings" });
+  await app.register(tenantProfileRoutes, { prefix: "/tenant/profile" });
 };

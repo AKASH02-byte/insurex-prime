@@ -12,7 +12,6 @@ export const TIMEZONES = [
   "Australia/Sydney",
 ] as const;
 export const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"] as const;
-export const DEFAULT_POLICY_STATUSES = ["PENDING", "ACTIVE"] as const;
 export const DEFAULT_PAYMENT_STATUSES = ["PENDING", "DUE"] as const;
 
 interface Definition<T extends z.ZodType = z.ZodType> {
@@ -37,7 +36,7 @@ export const SETTING_DEFINITIONS = {
     category: "general",
     description: "Legal or display name of the company.",
     schema: text(120),
-    default: "InsureX Prime",
+    default: "InsuroX Prime",
     auditValues: false,
   }),
   "general.supportEmail": define({
@@ -119,14 +118,6 @@ export const SETTING_DEFINITIONS = {
     description: "Allow agents to record new policy sales. Enforced by the API.",
     schema: z.boolean(),
     default: true,
-    auditValues: true,
-  }),
-  "policy.defaultPolicyStatus": define({
-    category: "policy",
-    description:
-      "Status of a new sold policy that is not paid in full at the point of sale. Enforced by the API.",
-    schema: z.enum(DEFAULT_POLICY_STATUSES),
-    default: "PENDING" as (typeof DEFAULT_POLICY_STATUSES)[number],
     auditValues: true,
   }),
   "policy.defaultPaymentStatus": define({

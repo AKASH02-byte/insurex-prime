@@ -3,7 +3,7 @@ import type { z } from "zod";
 import type { Database } from "../../config/database.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import type { AuthContext } from "../../middleware/auth.js";
-import { isSuperAdmin, requireAgentId } from "../../middleware/role.js";
+import { isAdmin, requireAgentId, requireTenantId } from "../../middleware/role.js";
 import { randomCode, withGeneratedCode } from "../../utils/codes.js";
 import { badRequest, conflict, notFound } from "../../utils/errors.js";
 import { toDateOnly, toNumber } from "../../utils/format.js";
@@ -50,7 +50,7 @@ const toReceiptDto = (receipt: ReceiptRecord) => ({
 });
 
 const receiptScope = (auth: AuthContext): Prisma.ReceiptWhereInput =>
-  isSuperAdmin(auth) ? {} : { soldPolicy: { agentId: requireAgentId(auth) } };
+  isAdmin(auth) ? {} : { soldPolicy: { agentId: requireAgentId(auth) } };
 
 export async function listReceipts(
   db: Database,
@@ -60,7 +60,7 @@ export async function listReceipts(
   const where: Prisma.ReceiptWhereInput = {
     AND: [
       receiptScope(auth),
-      isSuperAdmin(auth) && query.agentId ? { soldPolicy: { agentId: query.agentId } } : {},
+      isAdmin(auth) && query.agentId ? { soldPolicy: { agentId: query.agentId } } : {},
       query.soldPolicyId ? { soldPolicyId: query.soldPolicyId } : {},
       query.paymentMethod ? { paymentMethod: query.paymentMethod } : {},
       query.paymentStatus ? { paymentStatus: query.paymentStatus } : {},
@@ -110,7 +110,7 @@ export async function createReceipt(
   const sold = await db.soldPolicy.findFirst({
     where: {
       id: body.soldPolicyId,
-      ...(isSuperAdmin(auth) ? {} : { agentId: requireAgentId(auth) }),
+      ...(isAdmin(auth) ? {} : { agentId: requireAgentId(auth) }),
     },
     select: { id: true, policyNumber: true },
   });
@@ -143,6 +143,7 @@ export async function createReceipt(
 
         const created = await tx.receipt.create({
           data: {
+            tenantId: requireTenantId(auth),
             receiptNumber,
             soldPolicyId: sold.id,
             amount,

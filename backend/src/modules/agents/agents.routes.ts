@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { requireAuth, requireRole } from "../../middleware/role.js";
+import { requireAuth, tenantAdminOnly } from "../../middleware/role.js";
 import {
   errorResponses,
   ok,
@@ -29,7 +29,7 @@ import {
   updateAgent,
 } from "./agents.service.js";
 
-const adminOnly = requireRole("SUPER_ADMIN");
+const adminOnly = tenantAdminOnly;
 const security = [{ bearerAuth: [] }];
 const tags = ["Agents"];
 
@@ -51,7 +51,7 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { items, meta } = await listAgents(app.db, request.query);
+      const { items, meta } = await listAgents(request.db, request.query);
       return paginated(items, meta);
     },
   );
@@ -67,7 +67,7 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(agentWithStatsSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getAgent(app.db, requireAuth(request), request.params.id)),
+    async (request) => ok(await getAgent(request.db, requireAuth(request), request.params.id)),
   );
 
   app.post(
@@ -85,7 +85,7 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) =>
-      reply.code(201).send(ok(await createAgent(app.db, request, request.body))),
+      reply.code(201).send(ok(await createAgent(request.db, request, request.body))),
   );
 
   app.patch(
@@ -101,7 +101,7 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(agentWithStatsSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await updateAgent(app.db, request, request.params.id, request.body)),
+    async (request) => ok(await updateAgent(request.db, request, request.params.id, request.body)),
   );
 
   app.patch(
@@ -119,7 +119,7 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) =>
-      ok(await setAgentStatus(app.db, request, request.params.id, request.body.status)),
+      ok(await setAgentStatus(request.db, request, request.params.id, request.body.status)),
   );
 
   app.post(
@@ -136,7 +136,7 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(temporaryPasswordSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await resetAgentPassword(app.db, request, request.params.id)),
+    async (request) => ok(await resetAgentPassword(request.db, request, request.params.id)),
   );
 
   app.delete(
@@ -153,7 +153,7 @@ export const agentRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      await deleteAgent(app.db, request, request.params.id);
+      await deleteAgent(request.db, request, request.params.id);
       return ok({ id: request.params.id });
     },
   );
