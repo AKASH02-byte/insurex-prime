@@ -1,6 +1,6 @@
-# InsureX Prime — Backend API
+# InsuroX Prime — Backend API
 
-Node.js + TypeScript API server for InsureX Prime. Lives alongside the existing
+Node.js + TypeScript API server for InsuroX Prime. Lives alongside the existing
 TanStack Start frontend (repository root) and is deployed separately.
 
 | Concern        | Choice                                                         |
@@ -80,6 +80,53 @@ frontend or prefix them with `VITE_`.
 Invalid configuration stops the server at startup with a list of the offending
 variable **names** (values are never printed).
 
+## Multi-tenancy
+
+One **tenant** is one agency (for example _Aakruthi Enterprises_). It can sell for
+**several insurers** (TATA AIA, TATA AIG, LIC, …), each with its own business and
+licence codes. Everything an agency owns (agents, customers, policy catalog,
+sales, receipts, audit trail) belongs to exactly one tenant and is invisible to
+every other tenant. Agents, customers and sales are shared across the agency's
+insurers; the catalog is kept per insurer.
+
+```
+Platform (SUPER_ADMIN)
+ └─ Insurer (TATA_AIA, TATA_AIG, LIC, …)               master data
+ └─ Tenant: name, legal name, ONE admin
+     ├─ TenantInsurer × n: insurer + business code + licence code
+     ├─ Catalog per insurer: line (LIFE | HEALTH | MOTOR | COMMERCIAL) → category → sub-category → policy
+     ├─ Agents ─ Customers ─ Sold policies ─ Receipts
+```
+
+- **Activation:** `POST /api/v1/platform/tenants` creates the tenant, its single
+  `TENANT_ADMIN` (temporary password returned once), its `insurers` (each with
+  business and licence codes) and each insurer's starting catalog in one
+  transaction. Per insurer, `catalog.source` is `TEMPLATE` (the built-in catalog:
+  `TATA_AIA` loads the six Life categories and 47 policies, `TATA_AIG` the four
+  MediCare health plans), `CUSTOM` (send `catalog.lines`) or `NONE`.
+  `POST /platform/tenants/:id/insurers` adds an insurer later and
+  `PATCH /platform/tenants/:id/insurers/:insurerId` changes its codes.
+- **Catalog per tenant:** each tenant owns its own copy of the catalog, so one
+  tenant can rename, add or hide categories and policies without affecting
+  another. Agents fill their dropdowns from `GET /catalog/tree` (insurer → line → category → sub-category → policy; or the flat
+  `GET /catalog/categories` and `GET /policies?insurerId=&categoryId=`). With more
+  than one insurer, new categories and policies must name their `insurerId`; a
+  policy inside a category takes the category's insurer.
+- **Isolation:** the tenant always comes from the signed-in user, never from the
+  request body. Services use `request.db`, a Prisma client that adds
+  `tenantId` to every query on tenant tables and stamps every create
+  (`src/config/tenant-db.ts`). The few raw SQL queries (analytics) filter on
+  `tenantId` explicitly. A platform `SUPER_ADMIN` has no tenant; to look inside
+  one they send `X-Tenant-Id: <tenant uuid>` (ignored for everyone else).
+- **No commission maths:** the app records sales that are actually made on the
+  insurer's portal. Catalog price, cover and term are optional; when a policy has
+  no catalog premium or term, the sale must supply `premium` and `expiryDate`
+  (and may store the insurer's own number as `insurerPolicyNumber`).
+- **Suspension:** `POST /platform/tenants/:id/suspend` blocks every user of the
+  tenant on their next request; `…/activate` restores them.
+- **Not done yet:** PostgreSQL row-level security as a second line of defence, and
+  the frontend screens for tenant activation and the cascading dropdowns.
+
 ## Authentication and roles
 
 ```
@@ -130,7 +177,14 @@ The frontend should call `POST /api/v1/auth/verify` once after sign-in and
 
 ### Permissions
 
-| Capability                              | SUPER_ADMIN | AGENT                                  |
+`SUPER_ADMIN` is the platform operator: tenants, insurers and system settings.
+`TENANT_ADMIN` is the single admin of one tenant and has the "full" rights below
+inside that tenant only (shown in the `SUPER_ADMIN` column, which also applies
+to a platform admin acting inside a tenant with `X-Tenant-Id`). Tenant admins
+sign in with their email and temporary password at `POST /auth/agent/login`, or
+with Google if the email is linked.
+
+| Capability                              | TENANT_ADMIN | AGENT                                  |
 | --------------------------------------- | ----------- | -------------------------------------- |
 | Agents: list / create / update / delete | ✅          | ❌ (can read only their own profile)   |
 | Customers                               | all         | only their own; new ones auto-assigned |
@@ -139,7 +193,7 @@ The frontend should call `POST /api/v1/auth/verify` once after sign-in and
 | Sold policies: create / quote           | ✅          | own customers, catalog premium only, issue date −30…+90 days; `paymentMethod` creates the receipt |
 | Sold policies: update                   | ✅          | ❌                                     |
 | Receipts: list / read / create          | all         | their own sales                        |
-| Dashboard                               | platform    | their own figures                      |
+| Dashboard                               | whole tenant | their own figures                      |
 | `GET /agent/dashboard`, `/agent/profile` | ❌          | ✅ (own data; profile: name/phone/address) |
 | Reports, audit logs                     | ✅          | ❌                                     |
 

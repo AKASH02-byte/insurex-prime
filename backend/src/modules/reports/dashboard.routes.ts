@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { FastifyRequest } from "fastify";
-import { isSuperAdmin, requireAuth } from "../../middleware/role.js";
+import { isAdmin, requireAuth, requireTenantId } from "../../middleware/role.js";
 import { errorResponses, ok, successSchema } from "../../utils/response.js";
 import { soldPolicySchema } from "../sold-policies/sold-policies.schemas.js";
 import {
   getAgentPerformance,
   getPolicyDistribution,
+  getPortfolioSummary,
   getRecentSales,
   getSalesOverTime,
   getSummary,
@@ -16,6 +17,7 @@ import {
   agentPerformanceQuerySchema,
   agentPerformanceSchema,
   distributionSchema,
+  portfolioSummarySchema,
   recentSalesQuerySchema,
   salesQuerySchema,
   salesSeriesSchema,
@@ -25,12 +27,12 @@ import {
 
 const security = [{ bearerAuth: [] }];
 const tags = ["Dashboard"];
-const scopeNote = "SUPER_ADMIN receives platform-wide figures; AGENT receives only their own.";
+const scopeNote = "Admins receive figures for the whole tenant; AGENT receives only their own.";
 
 /** The role decides the scope — never a query parameter. */
 function scopeFor(request: FastifyRequest): AnalyticsScope {
   const auth = requireAuth(request);
-  return { agentId: isSuperAdmin(auth) ? null : auth.agentId };
+  return { tenantId: requireTenantId(auth), agentId: isAdmin(auth) ? null : auth.agentId };
 }
 
 export const dashboardRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -48,7 +50,7 @@ export const dashboardRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(summarySchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getSummary(app.db, scopeFor(request), request.query)),
+    async (request) => ok(await getSummary(request.db, scopeFor(request), request.query)),
   );
 
   app.get(
@@ -63,7 +65,7 @@ export const dashboardRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(salesSeriesSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getSalesOverTime(app.db, scopeFor(request), request.query)),
+    async (request) => ok(await getSalesOverTime(request.db, scopeFor(request), request.query)),
   );
 
   app.get(
@@ -78,7 +80,24 @@ export const dashboardRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(distributionSchema), ...errorResponses },
       },
     },
-    async (request) => ok(await getPolicyDistribution(app.db, scopeFor(request), request.query)),
+    async (request) =>
+      ok(await getPolicyDistribution(request.db, scopeFor(request), request.query)),
+  );
+
+  app.get(
+    "/portfolio-summary",
+    {
+      schema: {
+        tags,
+        security,
+        summary: "Sold policies per line by status",
+        description: scopeNote,
+        querystring: summaryQuerySchema,
+        response: { 200: successSchema(portfolioSummarySchema), ...errorResponses },
+      },
+    },
+    async (request) =>
+      ok(await getPortfolioSummary(request.db, scopeFor(request), request.query)),
   );
 
   app.get(
@@ -94,7 +113,7 @@ export const dashboardRoutes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { items } = await getAgentPerformance(app.db, scopeFor(request), request.query);
+      const { items } = await getAgentPerformance(request.db, scopeFor(request), request.query);
       return ok(items);
     },
   );
@@ -111,6 +130,6 @@ export const dashboardRoutes: FastifyPluginAsyncZod = async (app) => {
         response: { 200: successSchema(z.array(soldPolicySchema)), ...errorResponses },
       },
     },
-    async (request) => ok(await getRecentSales(app.db, scopeFor(request), request.query.limit)),
+    async (request) => ok(await getRecentSales(request.db, scopeFor(request), request.query.limit)),
   );
 };

@@ -34,6 +34,7 @@ export const customerSchema = z
     assignedAgent: agentRefSchema.nullable(),
     status: z.enum(CustomerStatus),
     policiesCount: z.number().int(),
+    policyNumbers: z.array(z.string()).describe("Policy numbers of the customer's sold policies"),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
   })

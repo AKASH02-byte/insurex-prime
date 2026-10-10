@@ -12,12 +12,15 @@ export interface AuditEntry {
   metadata?: Prisma.InputJsonValue;
   /** Defaults to the authenticated user. */
   userId?: string | null;
+  /** Defaults to the tenant the request acts in; null for platform-level actions. */
+  tenantId?: string | null;
 }
 
 export async function recordAudit(db: DbClient, request: FastifyRequest, entry: AuditEntry) {
   await db.auditLog.create({
     data: {
       userId: entry.userId ?? request.auth?.userId ?? null,
+      tenantId: entry.tenantId !== undefined ? entry.tenantId : (request.auth?.tenantId ?? null),
       action: entry.action,
       entity: entry.entity,
       entityId: entry.entityId ?? null,

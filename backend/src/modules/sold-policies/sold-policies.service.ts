@@ -3,7 +3,7 @@ import type { z } from "zod";
 import type { Database } from "../../config/database.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import type { AuthContext } from "../../middleware/auth.js";
-import { isSuperAdmin, requireAgentId } from "../../middleware/role.js";
+import { isAdmin, requireAgentId, requireTenantId } from "../../middleware/role.js";
 import { randomCode, withGeneratedCode } from "../../utils/codes.js";
 import { badRequest, conflict, forbidden, notFound } from "../../utils/errors.js";
 import { parseDateOnly, toDateOnly, toNumber } from "../../utils/format.js";
@@ -40,6 +40,7 @@ type SoldPolicyRecord = Prisma.SoldPolicyGetPayload<{ include: typeof soldPolicy
 export const toSoldPolicyDto = (sold: SoldPolicyRecord) => ({
   id: sold.id,
   policyNumber: sold.policyNumber,
+  insurerPolicyNumber: sold.insurerPolicyNumber,
   policy: sold.policy,
   customer: sold.customer,
   agent: sold.agent,
@@ -66,7 +67,7 @@ const toSoldPolicyDetailDto = (sold: SoldPolicyRecord) => ({
 
 /** Agents only ever see their own sales. */
 export const soldPolicyScope = (auth: AuthContext): Prisma.SoldPolicyWhereInput =>
-  isSuperAdmin(auth) ? {} : { agentId: requireAgentId(auth) };
+  isAdmin(auth) ? {} : { agentId: requireAgentId(auth) };
 
 export async function listSoldPolicies(
   db: Database,
@@ -76,7 +77,7 @@ export async function listSoldPolicies(
   const where: Prisma.SoldPolicyWhereInput = {
     AND: [
       soldPolicyScope(auth),
-      isSuperAdmin(auth) && query.agentId ? { agentId: query.agentId } : {},
+      isAdmin(auth) && query.agentId ? { agentId: query.agentId } : {},
       query.customerId ? { customerId: query.customerId } : {},
       query.policyId ? { policyId: query.policyId } : {},
       query.policyStatus ? { policyStatus: query.policyStatus } : {},
@@ -132,7 +133,7 @@ const DAY_MS = 86_400_000;
 
 type SaleInput = Pick<
   z.infer<typeof createSoldPolicyBodySchema>,
-  "policyId" | "customerId" | "issueDate" | "agentId" | "premium"
+  "policyId" | "customerId" | "issueDate" | "agentId" | "premium" | "expiryDate"
 >;
 
 /**
@@ -141,7 +142,7 @@ type SaleInput = Pick<
  * the sale itself so the agent sees exactly what will be recorded.
  */
 export async function resolveSale(db: Database, auth: AuthContext, body: SaleInput) {
-  const admin = isSuperAdmin(auth);
+  const admin = isAdmin(auth);
 
   const policy = await db.policy.findUnique({ where: { id: body.policyId } });
   if (!policy || (!admin && policy.status !== "ACTIVE")) throw notFound("Policy");
@@ -174,8 +175,16 @@ export async function resolveSale(db: Database, auth: AuthContext, body: SaleInp
     // The authenticate hook has already checked that this agent is ACTIVE.
     agentId = requireAgentId(auth);
   }
-  if (!admin && body.premium !== undefined) {
+  // Agents may only price a sale when the catalog has no price (quoted on the insurer's portal).
+  if (!admin && body.premium !== undefined && policy.premium !== null) {
     throw forbidden("Agents cannot override the catalog premium.");
+  }
+  if (!admin && body.expiryDate !== undefined && policy.durationMonths !== null) {
+    throw forbidden("Agents cannot override the policy term.");
+  }
+  const premium = body.premium !== undefined ? new Prisma.Decimal(body.premium) : policy.premium;
+  if (!premium) {
+    throw badRequest("premium is required: this policy has no catalog premium.");
   }
 
   const today = parseDateOnly(new Date().toISOString());
@@ -191,14 +200,17 @@ export async function resolveSale(db: Database, auth: AuthContext, body: SaleInp
     }
   }
 
-  return {
-    policy,
-    customer,
-    agentId,
-    premium: body.premium !== undefined ? new Prisma.Decimal(body.premium) : policy.premium,
-    issueDate,
-    expiryDate: computeExpiryDate(issueDate, policy.durationMonths),
-  };
+  const expiryDate = body.expiryDate
+    ? parseDateOnly(body.expiryDate)
+    : policy.durationMonths !== null
+      ? computeExpiryDate(issueDate, policy.durationMonths)
+      : null;
+  if (!expiryDate || Number.isNaN(expiryDate.getTime())) {
+    throw badRequest("expiryDate is required: this policy has no catalog term.");
+  }
+  if (expiryDate <= issueDate) throw badRequest("expiryDate must be after the issue date.");
+
+  return { policy, customer, agentId, premium, issueDate, expiryDate };
 }
 
 /** Server-side preview of a sale (premium, expiry). Records nothing. */
@@ -214,7 +226,7 @@ export async function quoteSoldPolicy(
       policyCode: sale.policy.policyCode,
       policyName: sale.policy.policyName,
       insuranceType: sale.policy.insuranceType,
-      coverageAmount: toNumber(sale.policy.coverageAmount),
+      coverageAmount: sale.policy.coverageAmount ? toNumber(sale.policy.coverageAmount) : null,
       premiumFrequency: sale.policy.premiumFrequency,
       durationMonths: sale.policy.durationMonths,
     },
@@ -245,7 +257,7 @@ export async function createSoldPolicy(
     auth,
     body,
   );
-  const paidAtSale = Boolean(body.paymentMethod) || body.paymentStatus === "PAID";
+  const paidAtSale = Boolean(body.paymentMethod);
   const year = issueDate.getUTCFullYear();
   const receiptYear = new Date().getUTCFullYear();
 
@@ -255,20 +267,18 @@ export async function createSoldPolicy(
       db.$transaction(async (tx) => {
         const created = await tx.soldPolicy.create({
           data: {
+            tenantId: requireTenantId(auth),
             policyNumber,
+            ...(body.insurerPolicyNumber ? { insurerPolicyNumber: body.insurerPolicyNumber } : {}),
             policyId: policy.id,
             customerId: customer.id,
             agentId,
             premium,
             issueDate,
             expiryDate,
-            // Paid in full at the point of sale: the policy is in force straight away.
-            ...(paidAtSale
-              ? { paymentStatus: "PAID", policyStatus: "ACTIVE" }
-              : {
-                  paymentStatus: body.paymentStatus ?? settings["policy.defaultPaymentStatus"],
-                  policyStatus: settings["policy.defaultPolicyStatus"],
-                }),
+            // A sale is in force straight away; only the payment status depends on collection.
+            policyStatus: "ACTIVE",
+            paymentStatus: paidAtSale ? "PAID" : settings["policy.defaultPaymentStatus"],
           },
         });
         let receiptNumber: string | undefined;
@@ -276,6 +286,7 @@ export async function createSoldPolicy(
           receiptNumber = randomCode(`RCP-${receiptYear}`, 8);
           await tx.receipt.create({
             data: {
+              tenantId: requireTenantId(auth),
               receiptNumber,
               soldPolicyId: created.id,
               amount: premium,

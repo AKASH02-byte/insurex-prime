@@ -72,7 +72,7 @@ export async function buildApp(deps: AppDependencies) {
       callback(null, false);
     },
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Authorization", "Content-Type", REQUEST_ID_HEADER],
+    allowedHeaders: ["Authorization", "Content-Type", "X-Tenant-Id", REQUEST_ID_HEADER],
     exposedHeaders: [REQUEST_ID_HEADER],
     // Agents authenticate with an HttpOnly session cookie; Super Admins with bearer tokens.
     credentials: true,
@@ -84,10 +84,10 @@ export async function buildApp(deps: AppDependencies) {
       openapi: {
         openapi: "3.1.0",
         info: {
-          title: "InsureX Prime API",
+          title: "InsuroX Prime API",
           version: "1.0.0",
           description: [
-            "REST API for the InsureX Prime insurance management platform.",
+            "REST API for the InsuroX Prime insurance management platform.",
             "",
             "**Authentication:** send a Firebase ID token from the signed-in frontend user as",
             "`Authorization: Bearer <Firebase ID token>`. The token is verified with the Firebase",
@@ -95,8 +95,14 @@ export async function buildApp(deps: AppDependencies) {
             "Agents sign in with `POST /api/v1/auth/agent/login` (agent code or email + password),",
             "which sets an HttpOnly session cookie that the browser sends with `credentials: include`.",
             "",
-            "**Roles:** `SUPER_ADMIN` has full access. `AGENT` is limited to their own profile,",
-            "customers, sold policies and receipts, and can read ACTIVE catalog policies only.",
+            "**Tenants:** each tenant is one agency attached to one insurer (e.g. Aakruthi Enterprises on",
+            "TATA AIA). All customers, agents, policies, sales and receipts belong to exactly one tenant and",
+            "are invisible to every other tenant.",
+            "",
+            "**Roles:** `SUPER_ADMIN` is the platform operator (tenants and insurers); to inspect a tenant's",
+            "data they send `X-Tenant-Id`. `TENANT_ADMIN` has full access inside their own tenant. `AGENT` is",
+            "limited to their own profile, customers, sold policies and receipts, and reads ACTIVE catalog",
+            "policies of their tenant only.",
             "",
             "All responses use `{ success: true, data }` or",
             "`{ success: false, error: { code, message, requestId } }`.",
@@ -125,6 +131,12 @@ export async function buildApp(deps: AppDependencies) {
           },
           { name: "Customers", description: "Customers (agents see only their own)" },
           { name: "Policies", description: "Policy catalog (agents see ACTIVE policies only)" },
+          { name: "Catalog", description: "The tenant's category tree and dropdown data" },
+          { name: "Platform: Insurers", description: "Insurance companies (SUPER_ADMIN)" },
+          {
+            name: "Platform: Tenants",
+            description: "Tenant activation and lifecycle (SUPER_ADMIN)",
+          },
           { name: "Sold Policies", description: "Policies sold to customers" },
           { name: "Receipts", description: "Payment receipts" },
           { name: "Dashboard", description: "Aggregated statistics, scoped by role" },

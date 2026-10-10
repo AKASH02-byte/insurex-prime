@@ -1,0 +1,18 @@
+packages:
+  - admin-web
+  - public-web
+  - backend
+
+overrides:
+  rolldown: 1.2.1
+
+# pnpm blocks dependency install scripts unless listed here.
+allowBuilds:
+  "@firebase/util": true
+  "@prisma/client": true
+  "@prisma/engines": true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+  workerd: true
+  sharp: true

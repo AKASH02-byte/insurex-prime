@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { TokenVerificationError, type TokenVerifier } from "../config/firebase.js";
+import type { Database } from "../config/database.js";
+import { scopeToTenant } from "../config/tenant-db.js";
 import type { Role } from "../generated/prisma/enums.js";
 import { hashSessionToken, readSessionCookie } from "../modules/auth/agent-session.js";
 import {
@@ -14,8 +16,13 @@ export interface AuthContext {
   userId: string;
   email: string;
   role: Role;
-  /** Set for AGENT users; null for SUPER_ADMIN. */
+  /** Set for AGENT users; null for admins. */
   agentId: string | null;
+  /**
+   * The tenant this request acts in. Always the user's own tenant for TENANT_ADMIN and
+   * AGENT; for a platform SUPER_ADMIN it is the optional `X-Tenant-Id` header, else null.
+   */
+  tenantId: string | null;
   /** Set when signed in with an agent password session (cookie); null for Firebase tokens. */
   sessionId: string | null;
   /** The agent signed in with a temporary password and must choose a new one. */
@@ -29,6 +36,8 @@ declare module "fastify" {
   }
   interface FastifyRequest {
     auth: AuthContext | null;
+    /** Database client restricted to `auth.tenantId`; use this for all tenant data. */
+    db: Database;
   }
   interface FastifyContextConfig {
     /** Reachable while the agent still has to replace a temporary password. */
@@ -74,6 +83,28 @@ export const authPlugin = fp(
   async (app: FastifyInstance, options: { tokenVerifier: TokenVerifier }) => {
     app.decorate("tokenVerifier", options.tokenVerifier);
     app.decorateRequest("auth", null);
+    app.decorateRequest("db", null as unknown as Database);
+
+    /** Resolves the acting tenant and attaches the tenant-scoped database client. */
+    async function bindTenant(
+      request: FastifyRequest,
+      user: { role: Role; tenantId: string | null },
+    ): Promise<string | null> {
+      let tenantId = user.tenantId;
+      if (user.role === "SUPER_ADMIN") {
+        const header = request.headers["x-tenant-id"];
+        const requested = Array.isArray(header) ? header[0] : header;
+        if (requested) {
+          const tenant = /^[0-9a-f-]{36}$/i.test(requested)
+            ? await app.db.tenant.findUnique({ where: { id: requested }, select: { id: true } })
+            : null;
+          if (!tenant) throw new AppError(404, "NOT_FOUND", "Tenant not found.");
+          tenantId = tenant.id;
+        }
+      }
+      request.db = scopeToTenant(app.db, tenantId);
+      return tenantId;
+    }
 
     async function authenticateSession(request: FastifyRequest, token: string) {
       assertTrustedOrigin(app, request);
@@ -102,6 +133,7 @@ export const authPlugin = fp(
         email: user.email,
         role: user.role,
         agentId: user.agent?.id ?? null,
+        tenantId: await bindTenant(request, user),
         sessionId: session.id,
         mustChangePassword: user.mustChangePassword,
       };
@@ -148,6 +180,7 @@ export const authPlugin = fp(
         email: user.email,
         role: user.role,
         agentId: user.agent?.id ?? null,
+        tenantId: await bindTenant(request, user),
         sessionId: null,
         mustChangePassword: false,
       };

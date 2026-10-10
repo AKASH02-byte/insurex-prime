@@ -88,6 +88,7 @@ export const agentLoginRoutes: FastifyPluginAsyncZod = async (app) => {
             entity: "User",
             entityId: user.id,
             userId: user.id,
+            tenantId: user.tenantId,
             metadata: { identifierType: identifier.kind },
           });
         }
@@ -110,7 +111,8 @@ export const agentLoginRoutes: FastifyPluginAsyncZod = async (app) => {
         entity: "User",
         entityId: user.id,
         userId: user.id,
-        metadata: { role: "AGENT", method: "PASSWORD", identifierType: identifier.kind },
+        tenantId: user.tenantId,
+        metadata: { role: user.role, method: "PASSWORD", identifierType: identifier.kind },
       });
 
       setSessionCookie(reply, cookieConfig, session.token);
@@ -142,7 +144,7 @@ export const agentLoginRoutes: FastifyPluginAsyncZod = async (app) => {
       if (token) {
         const session = await app.db.agentSession.findUnique({
           where: { tokenHash: hashSessionToken(token) },
-          select: { id: true, userId: true, revokedAt: true },
+          select: { id: true, userId: true, revokedAt: true, user: { select: { tenantId: true } } },
         });
         if (session && !session.revokedAt) {
           await app.db.agentSession.update({
@@ -154,6 +156,7 @@ export const agentLoginRoutes: FastifyPluginAsyncZod = async (app) => {
             entity: "User",
             entityId: session.userId,
             userId: session.userId,
+            tenantId: session.user.tenantId,
           });
         }
       }
@@ -178,8 +181,10 @@ export const agentLoginRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const auth = requireAuth(request);
-      if (auth.role !== "AGENT" || !auth.sessionId) {
-        throw forbidden("Only agents signed in with a password can change it here.");
+      if (auth.role === "SUPER_ADMIN" || !auth.sessionId) {
+        throw forbidden(
+          "Only agents and tenant admins signed in with a password can change it here.",
+        );
       }
       const limiterKey = `password|${auth.userId}`;
       passwordLimiter.assertAllowed(limiterKey);
