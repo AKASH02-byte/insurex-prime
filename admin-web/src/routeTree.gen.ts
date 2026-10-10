@@ -28,6 +28,8 @@ import { Route as AgentIndexRouteImport } from './routes/agent/index'
 import { Route as AgentChangePasswordRouteImport } from './routes/agent/change-password'
 import { Route as AgentCustomersRouteImport } from './routes/agent/customers'
 import { Route as AgentDashboardRouteImport } from './routes/agent/dashboard'
+import { Route as AgentGoalsRouteImport } from './routes/agent/goals'
+import { Route as AgentNotesRouteImport } from './routes/agent/notes'
 import { Route as AgentPoliciesRouteImport } from './routes/agent/policies'
 import { Route as AgentProfileRouteImport } from './routes/agent/profile'
 import { Route as AgentSellPolicyRouteImport } from './routes/agent/sell-policy'
@@ -128,6 +130,16 @@ const AgentDashboardRoute = AgentDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AgentRouteRoute,
 } as any)
+const AgentGoalsRoute = AgentGoalsRouteImport.update({
+  id: '/goals',
+  path: '/goals',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
+const AgentNotesRoute = AgentNotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => AgentRouteRoute,
+} as any)
 const AgentPoliciesRoute = AgentPoliciesRouteImport.update({
   id: '/policies',
   path: '/policies',
@@ -168,6 +180,8 @@ export interface FileRoutesByFullPath {
   '/agent/change-password': typeof AgentChangePasswordRoute
   '/agent/customers': typeof AgentCustomersRoute
   '/agent/dashboard': typeof AgentDashboardRoute
+  '/agent/goals': typeof AgentGoalsRoute
+  '/agent/notes': typeof AgentNotesRoute
   '/agent/policies': typeof AgentPoliciesRoute
   '/agent/profile': typeof AgentProfileRoute
   '/agent/sell-policy': typeof AgentSellPolicyRoute
@@ -192,6 +206,8 @@ export interface FileRoutesByTo {
   '/agent/change-password': typeof AgentChangePasswordRoute
   '/agent/customers': typeof AgentCustomersRoute
   '/agent/dashboard': typeof AgentDashboardRoute
+  '/agent/goals': typeof AgentGoalsRoute
+  '/agent/notes': typeof AgentNotesRoute
   '/agent/policies': typeof AgentPoliciesRoute
   '/agent/profile': typeof AgentProfileRoute
   '/agent/sell-policy': typeof AgentSellPolicyRoute
@@ -218,6 +234,8 @@ export interface FileRoutesById {
   '/agent/change-password': typeof AgentChangePasswordRoute
   '/agent/customers': typeof AgentCustomersRoute
   '/agent/dashboard': typeof AgentDashboardRoute
+  '/agent/goals': typeof AgentGoalsRoute
+  '/agent/notes': typeof AgentNotesRoute
   '/agent/policies': typeof AgentPoliciesRoute
   '/agent/profile': typeof AgentProfileRoute
   '/agent/sell-policy': typeof AgentSellPolicyRoute
@@ -245,6 +263,8 @@ export interface FileRouteTypes {
     | '/agent/change-password'
     | '/agent/customers'
     | '/agent/dashboard'
+    | '/agent/goals'
+    | '/agent/notes'
     | '/agent/policies'
     | '/agent/profile'
     | '/agent/sell-policy'
@@ -269,6 +289,8 @@ export interface FileRouteTypes {
     | '/agent/change-password'
     | '/agent/customers'
     | '/agent/dashboard'
+    | '/agent/goals'
+    | '/agent/notes'
     | '/agent/policies'
     | '/agent/profile'
     | '/agent/sell-policy'
@@ -294,6 +316,8 @@ export interface FileRouteTypes {
     | '/agent/change-password'
     | '/agent/customers'
     | '/agent/dashboard'
+    | '/agent/goals'
+    | '/agent/notes'
     | '/agent/policies'
     | '/agent/profile'
     | '/agent/sell-policy'
@@ -454,6 +478,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentDashboardRouteImport
       parentRoute: typeof AgentRouteRoute
     }
+    '/agent/goals': {
+      id: '/agent/goals'
+      path: '/goals'
+      fullPath: '/agent/goals'
+      preLoaderRoute: typeof AgentGoalsRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
+    '/agent/notes': {
+      id: '/agent/notes'
+      path: '/notes'
+      fullPath: '/agent/notes'
+      preLoaderRoute: typeof AgentNotesRouteImport
+      parentRoute: typeof AgentRouteRoute
+    }
     '/agent/policies': {
       id: '/agent/policies'
       path: '/policies'
@@ -489,6 +527,8 @@ interface AgentRouteRouteChildren {
   AgentChangePasswordRoute: typeof AgentChangePasswordRoute
   AgentCustomersRoute: typeof AgentCustomersRoute
   AgentDashboardRoute: typeof AgentDashboardRoute
+  AgentGoalsRoute: typeof AgentGoalsRoute
+  AgentNotesRoute: typeof AgentNotesRoute
   AgentPoliciesRoute: typeof AgentPoliciesRoute
   AgentProfileRoute: typeof AgentProfileRoute
   AgentSellPolicyRoute: typeof AgentSellPolicyRoute
@@ -500,6 +540,8 @@ const AgentRouteRouteChildren: AgentRouteRouteChildren = {
   AgentChangePasswordRoute: AgentChangePasswordRoute,
   AgentCustomersRoute: AgentCustomersRoute,
   AgentDashboardRoute: AgentDashboardRoute,
+  AgentGoalsRoute: AgentGoalsRoute,
+  AgentNotesRoute: AgentNotesRoute,
   AgentPoliciesRoute: AgentPoliciesRoute,
   AgentProfileRoute: AgentProfileRoute,
   AgentSellPolicyRoute: AgentSellPolicyRoute,

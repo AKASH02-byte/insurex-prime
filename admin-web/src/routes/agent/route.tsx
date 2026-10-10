@@ -45,6 +45,8 @@ const pageTitles: Record<string, [string, string]> = {
   "/agent/sell-policy": ["Record Sold Policy", "Log a policy you sold offline"],
   "/agent/sold-policies": ["Sold Policies", "Every policy you have sold"],
   "/agent/profile": ["My Profile", "Your agent details and account security"],
+  "/agent/notes": ["Field Notes", "Sticky memos and follow-ups from your customer visits"],
+  "/agent/goals": ["Goals", "Your weekly, monthly and yearly sales targets"],
 };
 
 function FullScreen({ children }: { children: React.ReactNode }) {

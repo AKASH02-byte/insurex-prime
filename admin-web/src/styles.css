@@ -65,9 +65,65 @@
   --color-signal: var(--signal);
   --color-signal-foreground: var(--signal-foreground);
   --shadow-nav: 0 18px 50px color-mix(in oklab, var(--foreground) 8%, transparent);
+
+  /* Field Ops palette (agent Field Notes & Goals) — values live in :root / .dark below. */
+  --color-fo-surface: var(--fo-surface);
+  --color-fo-lowest: var(--fo-lowest);
+  --color-fo-low: var(--fo-low);
+  --color-fo-container: var(--fo-container);
+  --color-fo-high: var(--fo-high);
+  --color-fo-highest: var(--fo-highest);
+  --color-fo-dim: var(--fo-dim);
+  --color-fo-ink: var(--fo-ink);
+  --color-fo-muted: var(--fo-muted);
+  --color-fo-outline: var(--fo-outline);
+  --color-fo-primary: var(--fo-primary);
+  --color-fo-primary-container: var(--fo-primary-container);
+  --color-fo-primary-fixed: var(--fo-primary-fixed);
+  --color-fo-on-primary-fixed: var(--fo-on-primary-fixed);
+  --color-fo-secondary: var(--fo-secondary);
+  --color-fo-secondary-container: var(--fo-secondary-container);
+  --color-fo-on-secondary-container: var(--fo-on-secondary-container);
+  --color-fo-tertiary: var(--fo-tertiary);
+  --color-fo-tertiary-container: var(--fo-tertiary-container);
+  --color-fo-tertiary-fixed: var(--fo-tertiary-fixed);
+  --color-fo-on-tertiary-fixed: var(--fo-on-tertiary-fixed);
+  --color-fo-error: var(--fo-error);
+  --color-fo-error-container: var(--fo-error-container);
+  --color-fo-on-error-container: var(--fo-on-error-container);
+  --color-fo-inverse: var(--fo-inverse);
+  --color-fo-inverse-on: var(--fo-inverse-on);
+  --font-fo-display: "Plus Jakarta Sans", "Manrope", sans-serif;
+  --font-fo-body: "Inter", "DM Sans", sans-serif;
 }
 
 :root {
+  --fo-surface: #f8f9ff;
+  --fo-lowest: #ffffff;
+  --fo-low: #eff4ff;
+  --fo-container: #e5eeff;
+  --fo-high: #dce9ff;
+  --fo-highest: #d3e4fe;
+  --fo-dim: #cbdbf5;
+  --fo-ink: #0b1c30;
+  --fo-muted: #3f4850;
+  --fo-outline: #bfc7d2;
+  --fo-primary: #006194;
+  --fo-primary-container: #007bb9;
+  --fo-primary-fixed: #cce5ff;
+  --fo-on-primary-fixed: #001d31;
+  --fo-secondary: #565e74;
+  --fo-secondary-container: #dae2fd;
+  --fo-on-secondary-container: #5c647a;
+  --fo-tertiary: #825100;
+  --fo-tertiary-container: #a36700;
+  --fo-tertiary-fixed: #ffddb8;
+  --fo-on-tertiary-fixed: #2a1700;
+  --fo-error: #ba1a1a;
+  --fo-error-container: #ffdad6;
+  --fo-on-error-container: #93000a;
+  --fo-inverse: #213145;
+  --fo-inverse-on: #eaf1ff;
   --radius: 1rem;
   --background: oklch(0.985 0.004 240);
   --foreground: oklch(0.19 0.045 251);
@@ -107,6 +163,32 @@
 }
 
 .dark {
+  --fo-surface: #0e1622;
+  --fo-lowest: #152030;
+  --fo-low: #1a2638;
+  --fo-container: #203046;
+  --fo-high: #26384f;
+  --fo-highest: #2c3f58;
+  --fo-dim: #334761;
+  --fo-ink: #e6edf7;
+  --fo-muted: #a8b4c4;
+  --fo-outline: #3d4c60;
+  --fo-primary: #0a74ad;
+  --fo-primary-container: #0b86c4;
+  --fo-primary-fixed: #0e3a57;
+  --fo-on-primary-fixed: #cce5ff;
+  --fo-secondary: #97a0b8;
+  --fo-secondary-container: #2a3550;
+  --fo-on-secondary-container: #c3cbe6;
+  --fo-tertiary: #e0a24a;
+  --fo-tertiary-container: #a36700;
+  --fo-tertiary-fixed: #4a3412;
+  --fo-on-tertiary-fixed: #ffddb8;
+  --fo-error: #ff8a80;
+  --fo-error-container: #5a1c1c;
+  --fo-on-error-container: #ffdad6;
+  --fo-inverse: #dce6f5;
+  --fo-inverse-on: #1a2638;
   color-scheme: dark;
   --background: oklch(0.15 0.035 262);
   --foreground: oklch(0.95 0.008 250);
@@ -682,4 +764,11 @@
 }
 .dark img[src^="data:image"] {
   background-color: #fff;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
