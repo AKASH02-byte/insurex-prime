@@ -115,7 +115,7 @@ export function AgentHeader({ title, subtitle, onToggleSidebar }: AgentHeaderPro
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 w-full sm:h-20 items-center justify-between gap-3 border-b border-border/80 bg-background/80 px-4 backdrop-blur-xl sm:px-8">
+    <header className="sticky top-0 z-20 flex h-20 w-full items-center justify-between gap-3 border-b border-border/80 bg-background/80 px-4 backdrop-blur-xl sm:px-8">
       <div className="flex min-w-0 items-center gap-3.5">
         <button
           type="button"

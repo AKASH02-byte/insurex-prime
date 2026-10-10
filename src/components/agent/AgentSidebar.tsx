@@ -2,13 +2,11 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   FilePlus2,
-  Flag,
   LayoutDashboard,
   LogOut,
   Shield,
   ShieldCheck,
   ShoppingBag,
-  StickyNote,
   UserRound,
   Users,
   X,
@@ -22,8 +20,6 @@ export const agentNavItems = [
   { label: "Policies", href: "/agent/policies", icon: Shield },
   { label: "Record Sold Policy", href: "/agent/sell-policy", icon: FilePlus2 },
   { label: "Sold Policies", href: "/agent/sold-policies", icon: ShoppingBag },
-  { label: "Field Notes", href: "/agent/notes", icon: StickyNote },
-  { label: "Goals", href: "/agent/goals", icon: Flag },
   { label: "Profile", href: "/agent/profile", icon: UserRound },
 ] as const;
 

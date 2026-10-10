@@ -4,7 +4,6 @@ import { Loader2, ServerOff, ShieldAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentHeader } from "@/components/agent/AgentHeader";
-import { AgentMobileNav } from "@/components/agent/AgentMobileNav";
 import { AgentSidebar } from "@/components/agent/AgentSidebar";
 import { ErrorState } from "@/components/agent/agent-ui";
 import {
@@ -44,8 +43,6 @@ const pageTitles: Record<string, [string, string]> = {
   "/agent/sell-policy": ["Record Sold Policy", "Log a policy you sold offline"],
   "/agent/sold-policies": ["Sold Policies", "Every policy you have sold, with payment status"],
   "/agent/profile": ["My Profile", "Your agent details and account security"],
-  "/agent/notes": ["Field Notes", "Sticky memos and follow-ups from your customer visits"],
-  "/agent/goals": ["Goals", "Your weekly, monthly and yearly sales targets"],
 };
 
 function FullScreen({ children }: { children: React.ReactNode }) {
@@ -231,7 +228,7 @@ function AgentLayout() {
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
         />
-        <div className="flex min-h-screen min-w-0 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-64">
+        <div className="flex min-h-screen min-w-0 flex-col lg:pl-64">
           <AgentHeader
             title={title}
             subtitle={subtitle}
@@ -244,7 +241,6 @@ function AgentLayout() {
             © 2026 InsureX Prime • Agent Workspace
           </footer>
         </div>
-        <AgentMobileNav />
       </div>
     </AgentSessionContext.Provider>
   );
