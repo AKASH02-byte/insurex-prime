@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { calendarDaysBetween } from "./field-notes/follow-up-groups";
 
 /**
  * Field notes ("sticky memos") an agent drops between customer visits.
@@ -224,23 +225,11 @@ export function useFieldNotes() {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const DAY = 86_400_000;
-
-const startOfDay = (value: Date) => {
-  const date = new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
-};
+// Date maths lives in field-notes/follow-up-groups so the table, badges and grouping agree.
+export { isDueSoon } from "./field-notes/follow-up-groups";
 
 /** Whole calendar days from today until the follow-up (negative when overdue). */
-export const daysUntilFollowUp = (iso: string) =>
-  Math.round((startOfDay(new Date(iso)) - startOfDay(new Date())) / DAY);
-
-/** Open (not completed) follow-ups due within the next 48 hours, including overdue ones. */
-export const isDueSoon = (note: FieldNote) =>
-  note.status !== "COMPLETED" &&
-  note.followUpAt !== null &&
-  new Date(note.followUpAt).getTime() - Date.now() < 2 * DAY;
+export const daysUntilFollowUp = (iso: string) => calendarDaysBetween(iso) ?? 0;
 
 export function relativeDayLabel(iso: string) {
   const days = daysUntilFollowUp(iso);

@@ -2,10 +2,12 @@ import {
   AlarmClock,
   ArrowRight,
   BadgeCheck,
+  CalendarCheck,
   CalendarClock,
+  CalendarDays,
+  CalendarRange,
+  CalendarX2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleCheck,
   CirclePause,
   CloudCheck,
@@ -22,8 +24,9 @@ import {
   Table2,
   TriangleAlert,
   X,
+  type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -36,6 +39,12 @@ import {
   relativeDayLabel,
   type FieldNote,
 } from "../field-notes-data";
+import {
+  filterNotes,
+  groupNotesByFollowUp,
+  type FollowUpGroup,
+  type FollowUpGroupKey,
+} from "./follow-up-groups";
 import { avatarTone, initialsOfClient } from "./note-theme";
 import type { NoteStatusFilter } from "./StickyBoard";
 
@@ -50,7 +59,151 @@ interface NotesTableProps {
   onReschedule: (notes: FieldNote[]) => void;
 }
 
-const PAGE_SIZE = 10;
+/** Section header styling per follow-up group, in the Field Ops palette. */
+const groupTone: Record<
+  FollowUpGroupKey,
+  { icon: LucideIcon; row: string; text: string; count: string }
+> = {
+  overdue: {
+    icon: TriangleAlert,
+    row: "bg-fo-error-container/70 border-fo-error",
+    text: "text-fo-on-error-container",
+    count: "bg-fo-error text-white",
+  },
+  today: {
+    icon: AlarmClock,
+    row: "bg-fo-tertiary-fixed/60 border-fo-tertiary-container",
+    text: "text-fo-tertiary",
+    count: "bg-fo-tertiary-container text-white",
+  },
+  next3: {
+    icon: CalendarDays,
+    row: "bg-fo-primary-fixed/60 border-fo-primary",
+    text: "text-fo-primary",
+    count: "bg-fo-primary text-white",
+  },
+  next5: {
+    icon: CalendarRange,
+    row: "bg-fo-high border-fo-primary-container",
+    text: "text-fo-primary-container",
+    count: "bg-fo-primary-container text-white",
+  },
+  upcoming: {
+    icon: CalendarCheck,
+    row: "bg-fo-container border-fo-secondary",
+    text: "text-fo-ink",
+    count: "bg-fo-secondary text-white",
+  },
+  none: {
+    icon: CalendarX2,
+    row: "bg-fo-low border-fo-outline",
+    text: "text-fo-muted",
+    count: "bg-fo-outline text-fo-ink",
+  },
+};
+
+/** The current date, refreshed after local midnight and when the tab regains focus. */
+function useToday() {
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const refresh = () =>
+      setToday((prev) => (new Date().toDateString() === prev.toDateString() ? prev : new Date()));
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+    const timer = window.setTimeout(refresh, nextMidnight.getTime() - now.getTime());
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [today]);
+  return today;
+}
+
+/** Checkbox that can show the "some selected" state. */
+function TriStateCheckbox({
+  checked,
+  indeterminate,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <input
+      type="checkbox"
+      aria-label={label}
+      checked={checked}
+      ref={(el) => {
+        if (el) el.indeterminate = indeterminate;
+      }}
+      onChange={(event) => onChange(event.target.checked)}
+      className="size-4.5 cursor-pointer accent-fo-primary"
+    />
+  );
+}
+
+function GroupHeaderRow({
+  group,
+  collapsed,
+  onToggle,
+  selection,
+}: {
+  group: FollowUpGroup;
+  collapsed: boolean;
+  onToggle: () => void;
+  selection: ReactNode;
+}) {
+  const tone = groupTone[group.key];
+  const Icon = tone.icon;
+  return (
+    <tr className={cn("border-l-4", tone.row)}>
+      <th scope="rowgroup" colSpan={7} className="p-0 text-left font-normal">
+        {/* Sticky so the heading stays in view while the table scrolls sideways. */}
+        <div className="sticky left-0 flex w-fit max-w-[100vw] items-center gap-3 py-2 pl-3 pr-4">
+          {selection}
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={!collapsed}
+            aria-controls={`follow-up-group-${group.key}`}
+            className={cn(
+              "flex min-h-9 cursor-pointer items-center gap-2 rounded-lg text-left",
+              tone.text,
+            )}
+          >
+            <Icon className="size-4 shrink-0" />
+            <span className="whitespace-nowrap font-fo-display text-sm font-bold">
+              {group.title}
+            </span>
+            <span
+              className={cn(
+                "grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold tabular-nums",
+                tone.count,
+              )}
+            >
+              {group.notes.length}
+            </span>
+            <span className="whitespace-nowrap text-xs font-medium text-fo-muted tabular-nums">
+              {group.description}
+            </span>
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-fo-muted transition-transform",
+                collapsed && "-rotate-90",
+              )}
+            />
+          </button>
+        </div>
+      </th>
+    </tr>
+  );
+}
 
 function StatusBadge({ note }: { note: FieldNote }) {
   if (note.status === "COMPLETED")
@@ -161,32 +314,19 @@ export function NotesTable({
 }: NotesTableProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [page, setPage] = useState(1);
+  const [collapsed, setCollapsed] = useState<Set<FollowUpGroupKey>>(new Set());
+  const today = useToday();
 
-  const dueSoonCount = notes.filter(isDueSoon).length;
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const rows = notes.filter((note) => {
-      if (status !== "all" && note.status !== status) return false;
-      if (dueSoonOnly && !isDueSoon(note)) return false;
-      if (!q) return true;
-      return [note.clientName, note.contactName, note.coverage, note.note, note.tag]
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
-    });
-    // Follow-up focus sorts by what's due first.
-    return dueSoonOnly
-      ? [...rows].sort((a, b) => (a.followUpAt ?? "").localeCompare(b.followUpAt ?? ""))
-      : rows;
-  }, [notes, query, status, dueSoonOnly]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  useEffect(() => setPage(1), [query, status, dueSoonOnly]);
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-  const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const dueSoonCount = notes.filter((note) => isDueSoon(note)).length;
+  const filtered = useMemo(
+    () => filterNotes(notes, { query, status, dueSoonOnly }),
+    [notes, query, status, dueSoonOnly],
+  );
+  // Grouping runs on the filtered rows, so sections and counts match the search.
+  const groups = useMemo(() => groupNotesByFollowUp(filtered, today), [filtered, today]);
+  const visibleGroups = groups.filter((group) => group.notes.length > 0);
+  const ordered = visibleGroups.flatMap((group) => group.notes);
+  const rows = visibleGroups.flatMap((group) => (collapsed.has(group.key) ? [] : group.notes));
 
   // Forget selections that are no longer visible.
   useEffect(() => {
@@ -197,13 +337,38 @@ export function NotesTable({
     });
   }, [notes]);
 
-  const allVisibleSelected = rows.length > 0 && rows.every((note) => selected.has(note.id));
-  const toggleAll = (checked: boolean) =>
+  const selectionOf = (list: FieldNote[]) => {
+    const count = list.filter((note) => selected.has(note.id)).length;
+    return { all: list.length > 0 && count === list.length, some: count > 0 };
+  };
+  const setMany = (list: FieldNote[], checked: boolean) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      rows.forEach((note) => (checked ? next.add(note.id) : next.delete(note.id)));
+      list.forEach((note) => (checked ? next.add(note.id) : next.delete(note.id)));
       return next;
     });
+  const visibleSelection = selectionOf(rows);
+  const toggleAll = (checked: boolean) => setMany(rows, checked);
+  const toggleGroup = (key: FollowUpGroupKey) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const jumpTo = (key: FollowUpGroupKey) => {
+    setCollapsed((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    requestAnimationFrame(() =>
+      document
+        .getElementById(`follow-up-group-${key}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
   const toggleOne = (id: string, checked: boolean) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -243,7 +408,7 @@ export function NotesTable({
   };
 
   const exportCsv = () => {
-    const source = selectedNotes.length ? selectedNotes : filtered;
+    const source = selectedNotes.length ? selectedNotes : ordered;
     const blob = new Blob([notesToCsv(source)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -260,7 +425,7 @@ export function NotesTable({
     onDueSoonChange(false);
   };
 
-  const stickyCell = "sticky z-10 bg-inherit";
+  const stickyCell = "sticky z-[1] bg-inherit";
   const actionButton =
     "grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-fo-container transition-all hover:bg-fo-high active:scale-95 sm:size-8";
 
@@ -372,8 +537,47 @@ export function NotesTable({
         </span>
       </div>
 
+      {/* Follow-up groups at a glance; empty groups stay listed with a zero count. */}
+      {ordered.length > 0 && (
+        <nav
+          aria-label="Follow-up groups"
+          className="no-scrollbar flex items-center gap-2 overflow-x-auto bg-fo-surface px-4 pb-3 pt-1 sm:bg-fo-lowest"
+        >
+          {groups.map((group) => {
+            const tone = groupTone[group.key];
+            const Icon = tone.icon;
+            const empty = group.notes.length === 0;
+            return (
+              <button
+                key={group.key}
+                type="button"
+                disabled={empty}
+                onClick={() => jumpTo(group.key)}
+                className={cn(
+                  "flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors disabled:cursor-default",
+                  empty
+                    ? "bg-fo-low text-fo-muted/70"
+                    : cn(tone.row, tone.text, "hover:brightness-95"),
+                )}
+              >
+                <Icon className="size-3.5" />
+                {group.title}
+                <span
+                  className={cn(
+                    "grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold tabular-nums",
+                    empty ? "bg-fo-container text-fo-muted" : tone.count,
+                  )}
+                >
+                  {group.notes.length}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
       {/* Horizontally scrollable table with frozen checkbox + client columns */}
-      {rows.length > 0 ? (
+      {ordered.length > 0 ? (
         <div className="relative w-full overflow-x-auto shadow-inner">
           <table className="w-full min-w-[760px] border-collapse text-left">
             <thead>
@@ -382,22 +586,21 @@ export function NotesTable({
                   scope="col"
                   className={cn(
                     stickyCell,
-                    "left-0 z-20 w-12 py-3 pl-4 pr-3 shadow-[2px_0_4px_rgba(0,0,0,0.03)]",
+                    "left-0 z-[2] w-12 py-3 pl-4 pr-3 shadow-[2px_0_4px_rgba(0,0,0,0.03)]",
                   )}
                 >
-                  <input
-                    type="checkbox"
-                    aria-label="Select all visible records"
-                    checked={allVisibleSelected}
-                    onChange={(event) => toggleAll(event.target.checked)}
-                    className="size-4.5 cursor-pointer accent-fo-primary"
+                  <TriStateCheckbox
+                    label="Select all visible records"
+                    checked={visibleSelection.all}
+                    indeterminate={visibleSelection.some && !visibleSelection.all}
+                    onChange={toggleAll}
                   />
                 </th>
                 <th
                   scope="col"
                   className={cn(
                     stickyCell,
-                    "left-12 z-20 min-w-[170px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-fo-ink shadow-[4px_0_6px_rgba(0,0,0,0.04)]",
+                    "left-12 z-[2] min-w-[170px] px-3 py-3 text-xs font-semibold uppercase tracking-wider text-fo-ink shadow-[4px_0_6px_rgba(0,0,0,0.04)]",
                   )}
                 >
                   Client Name
@@ -434,103 +637,127 @@ export function NotesTable({
                 </th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map((note, index) => {
-                const zebra = index % 2 === 0 ? "bg-fo-lowest" : "bg-fo-low";
-                const whatsapp = note.phone.replace(/\D/g, "");
-                return (
-                  <tr
-                    key={note.id}
-                    className={cn(
-                      "transition-colors hover:bg-fo-low",
-                      zebra,
-                      selected.has(note.id) && "bg-fo-low",
-                    )}
-                  >
-                    <td
-                      className={cn(
-                        stickyCell,
-                        "left-0 py-3 pl-4 pr-3 shadow-[2px_0_4px_rgba(0,0,0,0.03)]",
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${note.clientName}`}
-                        checked={selected.has(note.id)}
-                        onChange={(event) => toggleOne(note.id, event.target.checked)}
-                        className="size-4.5 cursor-pointer accent-fo-primary"
+            {visibleGroups.map((group) => {
+              const isCollapsed = collapsed.has(group.key);
+              const groupSelection = selectionOf(group.notes);
+              const toneOffset = ordered.indexOf(group.notes[0]!);
+              return (
+                <tbody key={group.key} id={`follow-up-group-${group.key}`} className="scroll-mt-24">
+                  <GroupHeaderRow
+                    group={group}
+                    collapsed={isCollapsed}
+                    onToggle={() => toggleGroup(group.key)}
+                    selection={
+                      <TriStateCheckbox
+                        label={`Select all ${group.title} records`}
+                        checked={groupSelection.all}
+                        indeterminate={groupSelection.some && !groupSelection.all}
+                        onChange={(checked) => setMany(group.notes, checked)}
                       />
-                    </td>
-                    <td
-                      className={cn(
-                        stickyCell,
-                        "left-12 px-3 py-3 shadow-[4px_0_6px_rgba(0,0,0,0.04)]",
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
+                    }
+                  />
+                  {!isCollapsed &&
+                    group.notes.map((note, rowIndex) => {
+                      const toneIndex = toneOffset + rowIndex;
+                      const zebra = rowIndex % 2 === 0 ? "bg-fo-lowest" : "bg-fo-low";
+                      const whatsapp = note.phone.replace(/\D/g, "");
+                      return (
+                        <tr
+                          key={note.id}
                           className={cn(
-                            "grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold",
-                            avatarTone(index),
+                            "transition-colors hover:bg-fo-low",
+                            zebra,
+                            selected.has(note.id) && "bg-fo-low",
                           )}
                         >
-                          {initialsOfClient(note.clientName)}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="max-w-[130px] truncate text-sm font-semibold text-fo-ink">
-                            {note.clientName}
-                          </p>
-                          <p className="max-w-[130px] text-xs text-fo-muted">{note.coverage}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-sm font-medium tabular-nums text-fo-ink">
-                      {formatLongDate(note.loggedAt)}
-                    </td>
-                    <td className="px-3 py-3">
-                      <MemoPill note={note} />
-                    </td>
-                    <td className="px-3 py-3">
-                      <StatusBadge note={note} />
-                    </td>
-                    <td className="px-3 py-3">
-                      <FollowUpCell note={note} />
-                    </td>
-                    <td className="py-3 pl-3 pr-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <a
-                          href={note.phone ? `tel:${note.phone}` : undefined}
-                          title="Call contact"
-                          aria-label={`Call ${note.clientName}`}
-                          className={cn(actionButton, "text-fo-primary")}
-                        >
-                          <Phone className="size-4" />
-                        </a>
-                        <a
-                          href={whatsapp ? `https://wa.me/${whatsapp}` : undefined}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="SMS / WhatsApp"
-                          aria-label={`Message ${note.clientName}`}
-                          className={cn(actionButton, "text-fo-tertiary")}
-                        >
-                          <MessageCircle className="size-4" />
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => onEdit(note)}
-                          title="Edit memo"
-                          aria-label={`Edit memo for ${note.clientName}`}
-                          className={cn(actionButton, "text-fo-muted")}
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
+                          <td
+                            className={cn(
+                              stickyCell,
+                              "left-0 py-3 pl-4 pr-3 shadow-[2px_0_4px_rgba(0,0,0,0.03)]",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${note.clientName}`}
+                              checked={selected.has(note.id)}
+                              onChange={(event) => toggleOne(note.id, event.target.checked)}
+                              className="size-4.5 cursor-pointer accent-fo-primary"
+                            />
+                          </td>
+                          <td
+                            className={cn(
+                              stickyCell,
+                              "left-12 px-3 py-3 shadow-[4px_0_6px_rgba(0,0,0,0.04)]",
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold",
+                                  avatarTone(toneIndex),
+                                )}
+                              >
+                                {initialsOfClient(note.clientName)}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="max-w-[130px] truncate text-sm font-semibold text-fo-ink">
+                                  {note.clientName}
+                                </p>
+                                <p className="max-w-[130px] text-xs text-fo-muted">
+                                  {note.coverage}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-sm font-medium tabular-nums text-fo-ink">
+                            {formatLongDate(note.loggedAt)}
+                          </td>
+                          <td className="px-3 py-3">
+                            <MemoPill note={note} />
+                          </td>
+                          <td className="px-3 py-3">
+                            <StatusBadge note={note} />
+                          </td>
+                          <td className="px-3 py-3">
+                            <FollowUpCell note={note} />
+                          </td>
+                          <td className="py-3 pl-3 pr-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <a
+                                href={note.phone ? `tel:${note.phone}` : undefined}
+                                title="Call contact"
+                                aria-label={`Call ${note.clientName}`}
+                                className={cn(actionButton, "text-fo-primary")}
+                              >
+                                <Phone className="size-4" />
+                              </a>
+                              <a
+                                href={whatsapp ? `https://wa.me/${whatsapp}` : undefined}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="SMS / WhatsApp"
+                                aria-label={`Message ${note.clientName}`}
+                                className={cn(actionButton, "text-fo-tertiary")}
+                              >
+                                <MessageCircle className="size-4" />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => onEdit(note)}
+                                title="Edit memo"
+                                aria-label={`Edit memo for ${note.clientName}`}
+                                className={cn(actionButton, "text-fo-muted")}
+                              >
+                                <Pencil className="size-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              );
+            })}
           </table>
         </div>
       ) : (
@@ -580,31 +807,8 @@ export function NotesTable({
         </div>
       </div>
 
-      {/* Pagination & sync status */}
+      {/* Sync status */}
       <div className="flex flex-col items-center justify-center gap-2 px-4 py-4">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => setPage((value) => value - 1)}
-            aria-label="Previous page"
-            className="grid size-9 cursor-pointer place-items-center rounded-full bg-fo-container text-fo-muted disabled:cursor-default disabled:opacity-30"
-          >
-            <ChevronLeft className="size-5" />
-          </button>
-          <span className="text-xs font-semibold text-fo-ink">
-            Page <strong>{page}</strong> of <strong>{totalPages}</strong>
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => setPage((value) => value + 1)}
-            aria-label="Next page"
-            className="grid size-9 cursor-pointer place-items-center rounded-full bg-fo-container text-fo-muted disabled:cursor-default disabled:opacity-30"
-          >
-            <ChevronRight className="size-5" />
-          </button>
-        </div>
         <div className="flex items-center gap-1.5 text-xs text-fo-muted">
           <CloudCheck className="size-3.5 text-emerald-600" />
           <span>Ledger synced with offline cache just now</span>
